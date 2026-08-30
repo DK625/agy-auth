@@ -27,38 +27,38 @@ irm https://raw.githubusercontent.com/DK625/agy-auth/main/install.ps1 | iex
 agi-auth login
 ```
 * **Mở trực tiếp link/trình duyệt** để xác thực Google OAuth (tương tự lệnh `/login` trong `agy`).
-* Sau khi đăng nhập thành công, hệ thống **tự động lấy Email Google (`@gmail.com`) và lưu thành profile**.
-* Bạn cũng có thể đặt tên tùy chọn: `agi-auth login acc2`.
+* Sau khi đăng nhập xong, hệ thống **tự động bóc tách Email Google (`@gmail.com`) và lưu profile**.
 
 ### 2. Xem danh sách tài khoản, Email & Quota (5h / 7d)
 ```bash
 agi-auth list
 ```
-Output:
+Output định dạng chuẩn theo `codex-auth`:
 ```text
-=== Antigravity Accounts ===
- * acc1 (minhha10c8@gmail.com) [● active]
-    ├─ 5h Limit:     100%
-    ├─ Weekly Limit: 100%
-    └─ Plan / Tier:  Standard
-
-   work@company.com [○ inactive]
-    ├─ 5h Limit:     85% (reset 23:45)
-    ├─ Weekly Limit: 92%
-    └─ Plan / Tier:  Pro
+     ACCOUNT                         PLAN  5H USAGE                WEEKLY USAGE           LAST ACTIVITY
+-------------------------------------------------------------------------------------------------------
+* 01 minhha10c8@gmail.com            Plus  100% (00:35 on 31 Aug)  100% (19:35 on 6 Sep)  Now          
+  02 sieunhanmanhme1511@gmail.com    Free  100%                    100%                   7m ago       
 ```
 
 ### 3. Chuyển đổi tài khoản (Switch)
-Hỗ trợ chuyển bằng **Tên profile** hoặc **Email Google**:
+Hỗ trợ chuyển bằng **Số thứ tự (Index)** hoặc **Email Google**:
 ```bash
-agi-auth switch minhha10c8@gmail.com
-# hoặc: agi-auth switch acc1
+# Chuyển bằng số thứ tự
+agi-auth switch 02
+# hoặc: agi-auth switch 2
+
+# Chuyển bằng email
+agi-auth switch sieunhanmanhme1511@gmail.com
 ```
 
 ### 4. Xóa tài khoản
 ```bash
-agi-auth remove work@company.com
-# hoặc: agi-auth remove acc2
+# Xóa bằng số thứ tự
+agi-auth remove 02
+
+# Xóa bằng email
+agi-auth remove sieunhanmanhme1511@gmail.com
 ```
 
 ---
@@ -74,7 +74,7 @@ agi
 ---
 
 ## 🛠️ How it works
-* **Mở OAuth trực tiếp:** Chạy thẳng luồng xác thực Google OAuth không bắt nhập tên thủ công.
+* **Native OAuth:** Mở luồng xác thực Google OAuth 2.0 PKCE trực tiếp, không bị kẹt terminal.
 * **Tự động nhận diện Email:** Trích xuất email thật từ Google OAuth userinfo API.
 * **Theo dõi Quota:** Tự động lấy và hiển thị hạn mức 5h (5-hour limit), Weekly Limit (7-day limit) và gói Plan / Tier.
 * **Bảo mật:** Lưu trữ an toàn bằng Windows Credential Manager (`advapi32.dll`) trên Windows và Keyring trên Unix.
