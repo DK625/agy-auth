@@ -1,6 +1,6 @@
 ﻿# agy-auth
 
-> Lightweight multi-account manager & shortcut CLI for Google Antigravity CLI (`agy`).
+> Lightweight multi-account manager & quota monitor for Google Antigravity CLI (`agy`).
 
 Simple, fast account switching inspired by `codex-auth`.
 
@@ -26,18 +26,25 @@ irm https://raw.githubusercontent.com/DK625/agy-auth/main/install.ps1 | iex
 ```bash
 agi-auth login acc1
 ```
-* Nếu đang có sẵn phiên đăng nhập: tự động nhận diện và lưu thành `acc1`.
-* Nếu muốn đăng nhập tài khoản Google mới: mở trình duyệt xác thực OAuth và lưu thành `acc2`.
+* **Tự động liên kết:** Nếu đang có sẵn phiên đăng nhập, hệ thống tự lấy Email Google (`@gmail.com`) và lưu thành `acc1`.
+* **Đăng nhập tài khoản mới:** Mở trình duyệt xác thực Google OAuth và lưu thành profile mới.
 
-### 2. Xem danh sách các tài khoản
+### 2. Xem danh sách tài khoản, Email & Quota (5h / 7d)
 ```bash
 agi-auth list
 ```
 Output:
 ```text
 === Antigravity Accounts ===
-  * acc1 (active)
-    acc2
+ * acc1 (minhha10c8@gmail.com) [● active]
+    ├─ 5h Limit:     100%
+    ├─ Weekly Limit: 100%
+    └─ Plan / Tier:  Standard
+
+   acc2 (work-email@company.com) [○ inactive]
+    ├─ 5h Limit:     85% (reset 23:45)
+    ├─ Weekly Limit: 92%
+    └─ Plan / Tier:  Pro
 ```
 
 ### 3. Chuyển đổi tài khoản (Switch)
@@ -59,6 +66,14 @@ Tự động cấu hình lệnh `agi` chạy Antigravity CLI không cần xác n
 agi
 # Tương đương với: agy --dangerously-skip-permissions "$@"
 ```
+
+---
+
+## 🛠️ How it works
+* **Lấy Email tự động:** Trích xuất email thật từ Google OAuth userinfo API.
+* **Theo dõi Quota:** Tự động lấy và hiển thị hạn mức 5h (5-hour limit), Weekly Limit (7-day limit) và gói Plan / Tier.
+* **Bảo mật:** Lưu trữ an toàn bằng Windows Credential Manager (`advapi32.dll`) trên Windows và Keyring trên Unix.
+* **Zero Dependency:** Sử dụng thuần Python Standard Library.
 
 ---
 
