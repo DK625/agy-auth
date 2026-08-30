@@ -1,22 +1,40 @@
-﻿# agy-auth
+# agy-auth
 
-> Lightweight multi-account manager & quota monitor for Google Antigravity CLI (`agy`).
+> Lightweight multi-account manager, quota monitor & real-time statusline for Google Antigravity CLI (`agy`).
 
-Simple, fast account switching inspired by `codex-auth`.
+Simple, fast account switching inspired by `codex-auth` + beautiful real-time terminal statusline.
 
 ---
 
 ## ⚡ Quick Install
 
-### Linux / macOS / WSL / Git Bash
-```bash
-curl -fsSL https://raw.githubusercontent.com/DK625/agy-auth/main/install.sh | bash
-```
-
 ### Windows (PowerShell)
 ```powershell
 irm https://raw.githubusercontent.com/DK625/agy-auth/main/install.ps1 | iex
 ```
+
+### Linux / macOS / WSL
+```bash
+curl -fsSL https://raw.githubusercontent.com/DK625/agy-auth/main/install.sh | bash
+```
+
+---
+
+## 🎨 Antigravity Real-Time Statusline
+
+Sau khi cài đặt bằng 1 lệnh trên, Antigravity CLI (`agy` / `agi`) sẽ tự động có **Statusline thời gian thực** hiển thị đầy đủ thông số:
+
+```text
+● READY / Gemini 3.7 Flash / game_tools (master*) │ ctx ███████████████ 100.0% · artifacts 12
+plan: Google AI Pro
+gemini 5h ●●●●●●●●●●  96% ⟳ 01:09
+gemini 7d ●●●●●●○○○○  55% ⟳ sep 1, 16:28
+```
+
+* **Trạng thái Agent:** `● READY`, `◆ THINKING`, `⚙ WORKING`, `🔧 TOOL`.
+* **Model & Workspace Git Branch:** Hiển thị model đang dùng và nhánh Git hiện tại kèm trạng thái dirty.
+* **Context Bar (Remain %):** Thanh context hiển thị chính xác % context window còn lại.
+* **Quota 5h & Quota 7d (Remain %):** Thanh chấm tròn trực quan hiển thị % Quota còn lại và thời gian hồi (Local time).
 
 ---
 
@@ -26,19 +44,30 @@ irm https://raw.githubusercontent.com/DK625/agy-auth/main/install.ps1 | iex
 ```bash
 agi-auth login
 ```
-* **Mở trực tiếp link/trình duyệt** để xác thực Google OAuth (tương tự lệnh `/login` trong `agy`).
-* Sau khi đăng nhập xong, hệ thống **tự động bóc tách Email Google (`@gmail.com`) và lưu profile**.
+* **Mở trực tiếp link/trình duyệt** với giao diện Landing Page hiện đại để xác thực Google OAuth.
+* Tự động nhận diện Email Google (`@gmail.com`) và lưu profile.
 
-### 2. Xem danh sách tài khoản, Email & Quota (5h / 7d)
+### 2. Xem danh sách tài khoản, Email, Quota còn lại & Lỗi
 ```bash
 agi-auth list
 ```
-Output định dạng chuẩn theo `codex-auth`:
+Output định dạng chuẩn theo `codex-auth` kèm **Kiểm tra trạng thái & Lỗi theo thời gian thực (Health Checks)**:
 ```text
-     ACCOUNT                         PLAN  5H USAGE                WEEKLY USAGE           LAST ACTIVITY
--------------------------------------------------------------------------------------------------------
-* 01 minhha10c8@gmail.com            Plus  100% (00:35 on 31 Aug)  100% (19:35 on 6 Sep)  Now          
-  02 sieunhanmanhme1511@gmail.com    Free  100%                    100%                   7m ago       
+     ACCOUNT                         PLAN            5H REMAIN               WEEKLY REMAIN          LAST ACTIVITY
+-----------------------------------------------------------------------------------------------------------------
+  01 lnhuyen160902@gmail.com         Disabled        Disabled (TOS)          Disabled (TOS)         19m ago      
+* 02 minhha10c8@gmail.com            Google AI Pro   96% (01:09 on 31 Aug)   55% (16:28 on 01 Sep)  Now          
+  03 onehammer256@gmail.com          Standard        TOS Required            TOS Required           21m ago      
+  04 sieunhanmanhme1511@gmail.com    Google AI Pro   Verify Required         Verify Required        26m ago      
+  05 thanhngan84672@gmail.com        Disabled        Disabled (TOS)          Disabled (TOS)         15m ago      
+  06 trinhduchoang625dora@gmail.com  Google AI Pro   TOS Required            TOS Required           33m ago      
+
+[!] Account Issues & Solutions:
+  • lnhuyen160902@gmail.com: Disabled (TOS) - Service disabled for TOS violation
+    -> Gửi đơn kháng nghị (Submit Appeal): https://forms.gle/hGzM9MEUv2azZsrb9
+  • sieunhanmanhme1511@gmail.com: Verify Required - Account verification required in browser
+    -> Mở link này để xác thực tài khoản: https://accounts.google.com/signin/continue?...
+  • trinhduchoang625dora@gmail.com: TOS Required - Google TOS not accepted on web. Visit https://antigravity.google to activate.
 ```
 
 ### 3. Chuyển đổi tài khoản (Switch)
@@ -49,16 +78,16 @@ agi-auth switch 02
 # hoặc: agi-auth switch 2
 
 # Chuyển bằng email
-agi-auth switch sieunhanmanhme1511@gmail.com
+agi-auth switch minhha10c8@gmail.com
 ```
 
 ### 4. Xóa tài khoản
 ```bash
 # Xóa bằng số thứ tự
-agi-auth remove 02
+agi-auth remove 03
 
 # Xóa bằng email
-agi-auth remove sieunhanmanhme1511@gmail.com
+agi-auth remove onehammer256@gmail.com
 ```
 
 ---
@@ -74,11 +103,11 @@ agi
 ---
 
 ## 🛠️ How it works
-* **Native OAuth:** Mở luồng xác thực Google OAuth 2.0 PKCE trực tiếp, không bị kẹt terminal.
-* **Tự động nhận diện Email:** Trích xuất email thật từ Google OAuth userinfo API.
-* **Theo dõi Quota:** Tự động lấy và hiển thị hạn mức 5h (5-hour limit), Weekly Limit (7-day limit) và gói Plan / Tier.
+* **Native OAuth 2.0 PKCE:** Xác thực nhanh, an toàn, có UI success page đẹp mắt.
+* **Token Lifecycle Auto-Refresh:** Tự động làm mới access token khi hết hạn.
+* **Real-Time Health Checks:** Tự động phát hiện tài khoản bị khóa TOS (`Disabled`), cần xác thực (`Verify Required`), chưa kích hoạt web (`TOS Required`) kèm link xử lý trực tiếp.
+* **Zero Dependency:** Sử dụng thuần Python Standard Library và Native PowerShell/.NET.
 * **Bảo mật:** Lưu trữ an toàn bằng Windows Credential Manager (`advapi32.dll`) trên Windows và Keyring trên Unix.
-* **Zero Dependency:** Sử dụng thuần Python Standard Library.
 
 ---
 

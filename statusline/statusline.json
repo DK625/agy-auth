@@ -1,0 +1,6 @@
+{
+  "show_quota": true,
+  "show_additional_stats": true,
+  "hide_zero_stats": true,
+  "show_state_indicator": true
+}
