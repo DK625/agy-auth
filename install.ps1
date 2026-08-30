@@ -42,7 +42,7 @@ $settingsPaths = @(
     "$env:APPDATA\agy\settings.json"
 )
 
-$statusLineCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$StatuslinePs1Path`""
+$statusLineCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File $StatuslinePs1Path"
 
 foreach ($sPath in $settingsPaths) {
     try {
@@ -70,7 +70,7 @@ foreach ($sPath in $settingsPaths) {
         }
         
         $jsonOut = $settingsObj | ConvertTo-Json -Depth 5
-        Set-Content -Path $sPath -Value $jsonOut -Encoding UTF8
+        [System.IO.File]::WriteAllText($sPath, $jsonOut, [System.Text.UTF8Encoding]::new($false))
     } catch {}
 }
 
