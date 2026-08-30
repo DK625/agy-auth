@@ -1,4 +1,4 @@
-# agi-auth
+﻿# agi-auth
 
 > Lightweight multi-account manager & shortcut CLI for Google Antigravity CLI (`agy`).
 
@@ -22,13 +22,19 @@ irm https://raw.githubusercontent.com/DK625/agy-auth/main/install.ps1 | iex
 
 ## 🚀 Usage
 
-### 1. Đăng nhập tài khoản mới
+### 1. Lưu phiên đang đăng nhập hiện tại
 ```bash
-agi-auth login acc1
+agi-auth save acc1
 ```
-> CLI sẽ mở trình duyệt để xác thực Google OAuth và tự động lưu phiên thành profile `acc1`.
+> Lưu lại phiên bạn đang dùng thành profile `acc1` mà không cần phải đăng nhập lại.
 
-### 2. Xem danh sách các tài khoản đã lưu
+### 2. Đăng nhập tài khoản mới & lưu profile
+```bash
+agi-auth login acc2
+```
+> CLI sẽ mở trình duyệt để xác thực Google OAuth và tự động lưu phiên thành profile `acc2`.
+
+### 3. Xem danh sách các tài khoản & trạng thái active
 ```bash
 agi-auth list
 ```
@@ -40,13 +46,13 @@ Output ví dụ:
     work-email@gmail.com
 ```
 
-### 3. Chuyển đổi tài khoản (Switch)
+### 4. Chuyển đổi tài khoản (Switch)
 ```bash
 agi-auth switch acc2
 # hoặc: agi-auth use acc2
 ```
 
-### 4. Xóa tài khoản
+### 5. Xóa tài khoản
 ```bash
 agi-auth remove acc2
 # hoặc: agi-auth rm acc2
