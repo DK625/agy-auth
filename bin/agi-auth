@@ -191,10 +191,10 @@ def fetch_account_email(access_token):
 
 
 def get_cached_quota():
-    """Load quota cached by statusline or CLI."""
+    """Load live quota cached from statusline/agy."""
     if QUOTA_CACHE_FILE.exists():
         try:
-            return json.loads(QUOTA_CACHE_FILE.read_text(encoding="utf-8"))
+            return json.loads(QUOTA_CACHE_FILE.read_text(encoding="utf-8-sig"))
         except Exception:
             return None
     return None
@@ -219,22 +219,27 @@ def format_relative_time(mtime, is_active=False):
     return f"{days}d ago"
 
 
-def format_quota_dt(q_data):
-    """Format remaining fraction and reset time into codex-auth style."""
+def format_usage_dt(q_data):
+    """Calculate USAGE percentage and format reset time (HH:mm on dd MMM)."""
     if not q_data:
-        return "100%"
+        return "-"
     rem = q_data.get("remaining_fraction")
-    pct = f"{int(round(float(rem) * 100))}%" if rem is not None else "100%"
+    if rem is None:
+        return "-"
+    # In agy statusline: usage% = round((1.0 - remaining_fraction) * 100)
+    usage_pct = int(round((1.0 - float(rem)) * 100))
+    usage_str = f"{usage_pct}%"
+    
     res = q_data.get("reset_time")
     if res and res != "null":
         try:
             dt = datetime.fromisoformat(res.replace("Z", "+00:00"))
             local_dt = dt.astimezone()
             time_str = local_dt.strftime("%H:%M on %d %b")
-            return f"{pct} ({time_str})"
+            return f"{usage_str} ({time_str})"
         except Exception:
             pass
-    return pct
+    return usage_str
 
 
 def find_account_file(identifier):
@@ -275,7 +280,7 @@ def cmd_list():
     curr_key = get_token_key(curr_raw)
     quota_info = get_cached_quota()
 
-    header = "     ACCOUNT                         PLAN  5H USAGE                WEEKLY USAGE           LAST ACTIVITY"
+    header = "     ACCOUNT                         PLAN            5H USAGE                WEEKLY USAGE           LAST ACTIVITY"
     print(header)
     print("-" * len(header))
 
@@ -301,7 +306,7 @@ def cmd_list():
                     acc_obj["email"] = email
                     f.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
 
-            # Normalize alias filename to email filename
+            # Auto-normalize alias filename to email filename
             if email and f.stem != email and not (ACCOUNTS_DIR / f"{email}.json").exists():
                 try:
                     new_f = ACCOUNTS_DIR / f"{email}.json"
@@ -311,19 +316,33 @@ def cmd_list():
                     pass
 
             displayName = email if email else f.stem
-            plan = acc_obj.get("plan_tier", "Plus" if "plus" in displayName.lower() else "Free")
             
-            # Quota
-            q_5h = "100%"
-            q_wk = "100%"
+            # Read dynamic Plan Tier and Quotas
+            plan = acc_obj.get("plan_tier", "Standard")
+            q_5h = "-"
+            q_wk = "-"
+
             if is_active and quota_info:
-                plan = quota_info.get("plan_tier") or plan
-                q_obj = quota_info.get("quota") or {}
-                q_5h = format_quota_dt(q_obj.get("gemini-5h"))
-                q_wk = format_quota_dt(q_obj.get("gemini-weekly"))
+                # Update live quota to profile file
+                live_tier = quota_info.get("plan_tier")
+                if live_tier:
+                    plan = live_tier
+                    acc_obj["plan_tier"] = plan
+                
+                live_q = quota_info.get("quota") or {}
+                if live_q:
+                    acc_obj["quota"] = live_q
+                    q_5h = format_usage_dt(live_q.get("gemini-5h"))
+                    q_wk = format_usage_dt(live_q.get("gemini-weekly"))
+                
+                # Persist updated quota into profile
+                f.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
+
             elif "quota" in acc_obj:
-                q_5h = format_quota_dt(acc_obj.get("quota", {}).get("gemini-5h"))
-                q_wk = format_quota_dt(acc_obj.get("quota", {}).get("gemini-weekly"))
+                plan = acc_obj.get("plan_tier", plan)
+                saved_q = acc_obj.get("quota") or {}
+                q_5h = format_usage_dt(saved_q.get("gemini-5h"))
+                q_wk = format_usage_dt(saved_q.get("gemini-weekly"))
 
             mtime = f.stat().st_mtime
             rel_time = format_relative_time(mtime, is_active=is_active)
@@ -331,11 +350,11 @@ def cmd_list():
             marker = "* " if is_active else "  "
             idx_str = f"{idx:02d}"
 
-            # Format row
+            # Format table row
             if is_active:
-                print(f"\033[1;32m{marker}{idx_str} {displayName:<31} {plan:<5} {q_5h:<23} {q_wk:<22} {rel_time:<13}\033[0m")
+                print(f"\033[1;32m{marker}{idx_str} {displayName:<31} {plan:<15} {q_5h:<23} {q_wk:<22} {rel_time:<13}\033[0m")
             else:
-                print(f"{marker}{idx_str} {displayName:<31} {plan:<5} {q_5h:<23} {q_wk:<22} {rel_time:<13}")
+                print(f"{marker}{idx_str} {displayName:<31} {plan:<15} {q_5h:<23} {q_wk:<22} {rel_time:<13}")
 
         except Exception as e:
             print(f"  {idx:02d} {f.stem:<31} Error: {e}")
