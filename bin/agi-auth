@@ -194,6 +194,27 @@ def get_token_key(json_str):
         return json_str.strip()
 
 
+def parse_iso_dt(iso_str):
+    """Safely parse ISO datetime string with arbitrary fractional seconds."""
+    if not iso_str or iso_str == "null":
+        return None
+    try:
+        clean = iso_str.replace("Z", "+00:00")
+        if "." in clean:
+            base, rest = clean.split(".", 1)
+            tz_idx = max(rest.find("+"), rest.find("-"))
+            if tz_idx != -1:
+                frac = rest[:tz_idx][:6]
+                tz = rest[tz_idx:]
+                clean = f"{base}.{frac}{tz}"
+            else:
+                frac = rest[:6]
+                clean = f"{base}.{frac}"
+        return datetime.fromisoformat(clean)
+    except Exception:
+        return None
+
+
 def ensure_valid_token(acc_obj, account_file=None):
     """Ensure account has a fresh access_token, refreshing automatically if expired."""
     token_data = acc_obj.get("token", {})
@@ -203,12 +224,12 @@ def ensure_valid_token(acc_obj, account_file=None):
 
     is_expired = True
     if expiry:
-        try:
-            exp_dt = datetime.fromisoformat(expiry.replace("Z", "+00:00"))
+        exp_dt = parse_iso_dt(expiry)
+        if exp_dt:
+            if exp_dt.tzinfo is None:
+                exp_dt = exp_dt.replace(tzinfo=timezone.utc)
             if exp_dt > datetime.now(timezone.utc) + timedelta(minutes=2):
                 is_expired = False
-        except Exception:
-            is_expired = True
 
     if not is_expired and access_token:
         return access_token
@@ -311,14 +332,12 @@ def format_usage_dt(q_data):
     usage_str = f"{usage_pct}%"
     
     res = q_data.get("reset_time")
-    if res and res != "null":
-        try:
-            dt = datetime.fromisoformat(res.replace("Z", "+00:00"))
+    if res:
+        dt = parse_iso_dt(res)
+        if dt:
             local_dt = dt.astimezone()
             time_str = local_dt.strftime("%H:%M on %d %b")
             return f"{usage_str} ({time_str})"
-        except Exception:
-            pass
     return usage_str
 
 
