@@ -7,7 +7,7 @@ set -e
 
 INSTALL_DIR="$HOME/.agi-auth"
 BIN_DIR="$HOME/.local/bin"
-RAW_URL="https://raw.githubusercontent.com/DK625/agi-auth/main"
+RAW_URL="https://raw.githubusercontent.com/DK625/agy-auth/main"
 
 echo -e "\033[1;36m==>\033[0m \033[1mInstalling agi-auth & agi shortcut...\033[0m"
 

@@ -10,12 +10,12 @@ Simple, fast account switching inspired by `codex-auth`.
 
 ### Linux / macOS / WSL / Git Bash
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DK625/agi-auth/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/DK625/agy-auth/main/install.sh | bash
 ```
 
 ### Windows (PowerShell)
 ```powershell
-irm https://raw.githubusercontent.com/DK625/agi-auth/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/DK625/agy-auth/main/install.ps1 | iex
 ```
 
 ---

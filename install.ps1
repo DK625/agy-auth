@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 
 $InstallDir = "$env:USERPROFILE\.agi-auth"
 $BinDir = "$InstallDir\bin"
-$RawUrl = "https://raw.githubusercontent.com/DK625/agi-auth/main"
+$RawUrl = "https://raw.githubusercontent.com/DK625/agy-auth/main"
 
 Write-Host "==> Installing agi-auth & agi shortcut for Windows..." -ForegroundColor Cyan
 
