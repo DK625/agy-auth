@@ -17,7 +17,7 @@ New-Item -ItemType Directory -Path "$env:USERPROFILE\.gemini\accounts" -Force | 
 New-Item -ItemType Directory -Path "$env:USERPROFILE\.local\bin" -Force | Out-Null
 
 # Download latest script (bypassing CDN cache)
-Invoke-WebRequest -Uri $RawUrl -OutFile "$BinDir\agi-auth.py" -UseBasicParsing
+Invoke-WebRequest -Uri $RawUrl -Headers @{ "Cache-Control" = "no-cache"; "Pragma" = "no-cache" } -OutFile "$BinDir\agi-auth.py" -UseBasicParsing
 
 # Create .cmd wrapper
 $cmdContent = "@echo off`npython `"$BinDir\agi-auth.py`" %*"
