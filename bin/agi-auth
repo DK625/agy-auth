@@ -17,6 +17,7 @@ import socketserver
 import threading
 import webbrowser
 import secrets
+import base64
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
