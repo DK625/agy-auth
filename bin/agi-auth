@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 agi-auth: Simple multi-account manager for Antigravity CLI (agy)
 Author: DK625
@@ -18,6 +18,7 @@ import threading
 import webbrowser
 import secrets
 import base64
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -246,6 +247,64 @@ def format_usage_dt(q_data):
     return usage_str
 
 
+def check_account_health(access_token):
+    """Check account eligibility & TOS status against CloudCode backend."""
+    if not access_token:
+        return {"status": "401", "message": "Missing Token"}
+    
+    # 1. Check loadCodeAssist for TOS acceptance requirement
+    url_lca = "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
+    try:
+        req = urllib.request.Request(
+            url_lca,
+            data=b"{}",
+            headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
+        )
+        with urllib.request.urlopen(req, timeout=2.5) as resp:
+            lca_data = json.loads(resp.read().decode())
+            for t in lca_data.get("ineligibleTiers", []):
+                if t.get("reasonCode") == "GOOGLE_TOS_NOT_SUPPORTED_BY_CLIENT":
+                    return {
+                        "status": "TOS Required",
+                        "message": "Google TOS not accepted on web. Visit https://antigravity.google to activate."
+                    }
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return {"status": "401", "message": "Token expired / Unauthorized"}
+    except Exception:
+        pass
+
+    # 2. Check retrieveUserQuotaSummary for Account Verification requirements
+    url_rqs = "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"
+    try:
+        req = urllib.request.Request(
+            url_rqs,
+            data=b"{}",
+            headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
+        )
+        with urllib.request.urlopen(req, timeout=2.5) as resp:
+            return {"status": "OK", "message": "OK"}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="ignore")
+        try:
+            err_json = json.loads(body).get("error", {})
+            for d in err_json.get("details", []):
+                if d.get("reason") == "VALIDATION_REQUIRED":
+                    return {
+                        "status": "Verify Required",
+                        "message": "Account verification required by Google in browser",
+                        "validation_url": d.get("metadata", {}).get("validation_url")
+                    }
+            if e.code == 401:
+                return {"status": "401", "message": "Token expired / Unauthorized"}
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    return {"status": "OK", "message": "OK"}
+
+
 def find_account_file(identifier):
     """Find account profile by index, alias, or email."""
     if not identifier:
@@ -276,7 +335,7 @@ def find_account_file(identifier):
 
 
 def cmd_list():
-    """List all saved accounts formatted exactly like codex-auth list."""
+    """List all saved accounts with dynamic health/eligibility checks."""
     ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
     saved_files = sorted(ACCOUNTS_DIR.glob("*.json"))
     curr_raw = cred_read()
@@ -291,37 +350,52 @@ def cmd_list():
         print("  -- No accounts saved yet. Run 'agi-auth login' to add an account. --")
         return
 
-    has_active_match = False
+    # Load account objects
+    acc_records = []
+    tokens_to_check = []
     for idx, f in enumerate(saved_files, 1):
         try:
             content = f.read_text(encoding="utf-8")
             acc_obj = json.loads(content)
             saved_key = get_token_key(content)
-            is_active = (curr_key and saved_key == curr_key)
-            if is_active:
-                has_active_match = True
+            is_active = bool(curr_key and saved_key == curr_key)
+            email = acc_obj.get("email") or f.stem
+            token = acc_obj.get("token", {}).get("access_token")
+            acc_records.append({
+                "file": f,
+                "obj": acc_obj,
+                "is_active": is_active,
+                "email": email,
+                "token": token,
+                "idx": idx
+            })
+            tokens_to_check.append(token)
+        except Exception:
+            pass
 
-            email = acc_obj.get("email")
-            if not email:
-                token = acc_obj.get("token", {}).get("access_token")
-                email = fetch_account_email(token)
-                if email:
-                    acc_obj["email"] = email
-                    f.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
+    # Run health checks in parallel (fast concurrent check)
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        health_results = list(executor.map(check_account_health, tokens_to_check))
 
-            if email and f.stem != email and not (ACCOUNTS_DIR / f"{email}.json").exists():
-                try:
-                    new_f = ACCOUNTS_DIR / f"{email}.json"
-                    f.rename(new_f)
-                    f = new_f
-                except Exception:
-                    pass
+    issues_found = []
+    has_active_match = False
 
-            displayName = email if email else f.stem
-            plan = acc_obj.get("plan_tier", "Standard")
-            q_5h = "-"
-            q_wk = "-"
+    for rec, health in zip(acc_records, health_results):
+        f = rec["file"]
+        acc_obj = rec["obj"]
+        is_active = rec["is_active"]
+        displayName = rec["email"]
+        idx = rec["idx"]
 
+        if is_active:
+            has_active_match = True
+
+        plan = acc_obj.get("plan_tier", "Standard")
+        q_5h = "-"
+        q_wk = "-"
+
+        # If healthy, show usage numbers
+        if health["status"] == "OK":
             if is_active and quota_info:
                 live_tier = quota_info.get("plan_tier")
                 if live_tier:
@@ -335,26 +409,29 @@ def cmd_list():
                     q_wk = format_usage_dt(live_q.get("gemini-weekly"))
                 
                 f.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
-
             elif "quota" in acc_obj:
                 plan = acc_obj.get("plan_tier", plan)
                 saved_q = acc_obj.get("quota") or {}
                 q_5h = format_usage_dt(saved_q.get("gemini-5h"))
                 q_wk = format_usage_dt(saved_q.get("gemini-weekly"))
+        else:
+            # Display status error code in table (like codex-auth)
+            q_5h = health["status"]
+            q_wk = health["status"]
+            issues_found.append((displayName, health))
 
-            mtime = f.stat().st_mtime
-            rel_time = format_relative_time(mtime, is_active=is_active)
-            
-            marker = "* " if is_active else "  "
-            idx_str = f"{idx:02d}"
+        mtime = f.stat().st_mtime
+        rel_time = format_relative_time(mtime, is_active=is_active)
+        
+        marker = "* " if is_active else "  "
+        idx_str = f"{idx:02d}"
 
-            if is_active:
-                print(f"\033[1;32m{marker}{idx_str} {displayName:<31} {plan:<15} {q_5h:<23} {q_wk:<22} {rel_time:<13}\033[0m")
-            else:
-                print(f"{marker}{idx_str} {displayName:<31} {plan:<15} {q_5h:<23} {q_wk:<22} {rel_time:<13}")
-
-        except Exception as e:
-            print(f"  {idx:02d} {f.stem:<31} Error: {e}")
+        if is_active:
+            print(f"\033[1;32m{marker}{idx_str} {displayName:<31} {plan:<15} {q_5h:<23} {q_wk:<22} {rel_time:<13}\033[0m")
+        elif health["status"] != "OK":
+            print(f"\033[93m{marker}{idx_str} {displayName:<31} {plan:<15} {q_5h:<23} {q_wk:<22} {rel_time:<13}\033[0m")
+        else:
+            print(f"{marker}{idx_str} {displayName:<31} {plan:<15} {q_5h:<23} {q_wk:<22} {rel_time:<13}")
 
     if curr_raw and not has_active_match:
         curr_token = None
@@ -364,6 +441,17 @@ def cmd_list():
             pass
         curr_email = fetch_account_email(curr_token) or "current session"
         print(f"\033[1;33m* ?? {curr_email:<31} [unsaved] Run 'agi-auth login' to save\033[0m")
+
+    # If any accounts have issues, display solutions and verification links
+    if issues_found:
+        print("\n\033[1;33m[!] Account Issues & Solutions:\033[0m")
+        for em, h in issues_found:
+            st = h["status"]
+            msg = h["message"]
+            v_url = h.get("validation_url")
+            print(f"  \033[1;31m• {em}\033[0m: \033[1m{st}\033[0m - {msg}")
+            if v_url:
+                print(f"    \033[90m-> Mở link này để xác thực tài khoản:\033[0m\n    \033[4;36m{v_url}\033[0m")
 
 
 def perform_direct_google_oauth(name=None):
@@ -402,7 +490,7 @@ def perform_direct_google_oauth(name=None):
                 </head>
                 <body>
                     <div class="card">
-                        <h2>âœ” Authentication Successful!</h2>
+                        <h2>✔ Authentication Successful!</h2>
                         <p>You can close this tab and return to your terminal.</p>
                     </div>
                     <script>setTimeout(function(){ window.close(); }, 3000);</script>
@@ -468,6 +556,7 @@ def perform_direct_google_oauth(name=None):
         print("\033[91m[Error] Did not receive authorization code.\033[0m")
         return
 
+    # Exchange code for token (including client_secret)
     token_url = "https://oauth2.googleapis.com/token"
     token_payload = urllib.parse.urlencode({
         "client_id": OAUTH_CLIENT_ID,
@@ -572,13 +661,13 @@ def print_help():
     print("""\033[1;36magi-auth\033[0m - Multi-account manager for Antigravity CLI (agy)
 
 \033[1mUsage:\033[0m
-  agi-auth login [name]        ÄÄƒng nháº­p Google OAuth (Má»Ÿ trÃ¬nh duyá»‡t trá»±c tiáº¿p)
-  agi-auth list                Xem danh sÃ¡ch tÃ i khoáº£n, Email & Quota (5h/weekly)
-  agi-auth switch <num/email>  Chuyá»ƒn sang tÃ i khoáº£n (báº±ng Sá»‘ thá»© tá»± hoáº·c Email)
-  agi-auth remove <num/email>  XÃ³a tÃ i khoáº£n (báº±ng Sá»‘ thá»© tá»± hoáº·c Email)
+  agi-auth login [name]        Đăng nhập Google OAuth (Mở trình duyệt trực tiếp)
+  agi-auth list                Xem danh sách tài khoản, Email, Quota & Trạng thái lỗi
+  agi-auth switch <num/email>  Chuyển sang tài khoản (bằng Số thứ tự hoặc Email)
+  agi-auth remove <num/email>  Xóa tài khoản (bằng Số thứ tự hoặc Email)
 
 \033[1mQuick Run:\033[0m
-  agi                          Cháº¡y agy vá»›i --dangerously-skip-permissions
+  agi                          Chạy agy với --dangerously-skip-permissions
 """)
 
 
@@ -608,4 +697,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
