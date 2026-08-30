@@ -9,6 +9,7 @@ import os
 import json
 import subprocess
 import hashlib
+import time
 import urllib.request
 from pathlib import Path
 
@@ -192,11 +193,31 @@ def format_quota(q_data):
     time_str = ""
     if res and res != "null":
         try:
-            # ISO timestamp -> hour:minute
             time_str = f" (reset {res.split('T')[1][:5]})"
         except Exception:
             pass
     return f"{pct}%{time_str}"
+
+
+def find_account_file(identifier):
+    """Find account profile by alias or by email."""
+    if not identifier:
+        return None
+    ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
+    # Direct match by filename
+    direct = ACCOUNTS_DIR / f"{identifier}.json"
+    if direct.exists():
+        return direct
+    
+    # Match by email inside json
+    for f in ACCOUNTS_DIR.glob("*.json"):
+        try:
+            obj = json.loads(f.read_text(encoding="utf-8"))
+            if obj.get("email", "").lower() == identifier.lower():
+                return f
+        except Exception:
+            pass
+    return None
 
 
 def cmd_list():
@@ -230,11 +251,17 @@ def cmd_list():
                         acc_obj["email"] = email
                         f.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
 
-                email_display = f"({email})" if email else "(No email)"
                 status_tag = "\033[1;32m● active\033[0m" if is_active else "\033[90m○ inactive\033[0m"
                 marker = "\033[1;32m*\033[0m" if is_active else " "
 
-                print(f" {marker} \033[1m{acc_name}\033[0m \033[36m{email_display}\033[0m [{status_tag}]")
+                if email and acc_name == email:
+                    display_header = f" {marker} \033[1;36m{email}\033[0m [{status_tag}]"
+                elif email:
+                    display_header = f" {marker} \033[1m{acc_name}\033[0m \033[36m({email})\033[0m [{status_tag}]"
+                else:
+                    display_header = f" {marker} \033[1m{acc_name}\033[0m [{status_tag}]"
+
+                print(display_header)
 
                 # Show quota info for active account or from cached profile
                 q_5h = "100%"
@@ -260,31 +287,23 @@ def cmd_list():
                 print(f"    {acc_name} (corrupt: {e})")
 
     if curr_raw and not has_active_match:
-        print("  \033[1;33m* (current live session - unsaved)\033[0m")
-        print("\033[90m  -> Run 'agi-auth login <name>' to save this account.\033[0m\n")
+        # Detect email of current unsaved session
+        curr_token = None
+        try:
+            curr_token = json.loads(curr_raw).get("token", {}).get("access_token")
+        except Exception:
+            pass
+        curr_email = fetch_account_email(curr_token)
+        email_tag = f" ({curr_email})" if curr_email else ""
+        print(f"  \033[1;33m* current session{email_tag} [● active - unsaved]\033[0m")
+        print("\033[90m  -> Run 'agi-auth login' to automatically register this session.\033[0m\n")
     elif not saved_files and not curr_raw:
-        print("\033[93m[!] No saved accounts. Run 'agi-auth login <name>' to login.\033[0m\n")
+        print("\033[93m[!] No saved accounts. Run 'agi-auth login' to login.\033[0m\n")
 
 
 def cmd_login(name=None):
-    """Log in / register an account."""
-    if not name:
-        if len(sys.argv) > 2:
-            name = sys.argv[2]
-        else:
-            try:
-                name = input("Enter account name (e.g. acc1, acc2): ").strip()
-            except (KeyboardInterrupt, EOFError):
-                print("\nAborted.")
-                sys.exit(0)
-
-    if not name:
-        print("\033[91m[Error] Account name cannot be empty.\033[0m")
-        sys.exit(1)
-
+    """Directly triggers Google OAuth login and automatically saves by Email."""
     ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
-    target_file = ACCOUNTS_DIR / f"{name}.json"
-
     curr_raw = cred_read()
     curr_key = get_token_key(curr_raw)
 
@@ -298,10 +317,8 @@ def cmd_login(name=None):
         except Exception:
             pass
 
-    force_new = "--new" in sys.argv or "--force" in sys.argv
-
-    # If current live session is not saved yet, save it directly under this name!
-    if curr_raw and not has_active_match and not force_new:
+    # If already logged in and current session not registered yet, auto-register by email!
+    if curr_raw and not has_active_match and not ("--new" in sys.argv or "--force" in sys.argv):
         try:
             acc_obj = json.loads(curr_raw)
         except Exception:
@@ -310,21 +327,24 @@ def cmd_login(name=None):
         email = fetch_account_email(token)
         if email:
             acc_obj["email"] = email
+
+        profile_name = name if name else (email if email else f"account_{int(time.time())}")
+        target_file = ACCOUNTS_DIR / f"{profile_name}.json"
         target_file.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
-        email_txt = f" ({email})" if email else ""
-        print(f"\033[1;32m[OK] Linked current active session as '{name}'{email_txt}!\033[0m")
-        print("\033[90m(To login with a different Google account instead, run: agi-auth login <name> --new)\033[0m")
+        
+        email_txt = f" ({email})" if email and profile_name != email else ""
+        print(f"\033[1;32m[OK] Automatically registered active session as '{profile_name}'{email_txt}!\033[0m")
         return
 
-    # Clear active session and open agy for OAuth login
+    # Clear active session to force fresh OAuth in browser
     cred_delete(CRED_TARGET)
-    print(f"\033[1;36m[>] Starting Antigravity CLI to authenticate account '{name}'...\033[0m")
-    print("\033[90mPlease complete login in your browser if prompted.\033[0m")
+    print("\033[1;36m[>] Launching Google OAuth login...\033[0m")
+    print("\033[90mOpening browser window / link to authenticate with Google...\033[0m\n")
 
     try:
         subprocess.run(["agy"], check=False)
     except FileNotFoundError:
-        print("\033[91m[Error] 'agy' command not found in PATH!\033[0m")
+        print("\033[91m[Error] 'agy' executable not found in PATH!\033[0m")
         sys.exit(1)
 
     new_cred = cred_read(CRED_TARGET)
@@ -337,55 +357,60 @@ def cmd_login(name=None):
         email = fetch_account_email(token)
         if email:
             acc_obj["email"] = email
+
+        profile_name = name if name else (email if email else f"account_{int(time.time())}")
+        target_file = ACCOUNTS_DIR / f"{profile_name}.json"
         target_file.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
-        email_txt = f" ({email})" if email else ""
-        print(f"\033[1;32m[OK] Login successful! Saved account as '{name}'{email_txt}.\033[0m")
+        
+        email_txt = f" ({email})" if email and profile_name != email else ""
+        print(f"\n\033[1;32m[OK] Login successful! Saved account as '{profile_name}'{email_txt}.\033[0m")
     else:
-        print("\033[91m[Error] No new credential detected after login.\033[0m")
+        print("\n\033[91m[Error] No new login credential detected.\033[0m")
 
 
-def cmd_switch(name):
-    """Switch to a saved account."""
-    if not name:
-        print("\033[91m[Error] Missing account name. Usage: agi-auth switch <name>\033[0m")
+def cmd_switch(identifier):
+    """Switch to a saved account (by alias or email)."""
+    if not identifier:
+        print("\033[91m[Error] Missing account name or email. Usage: agi-auth switch <account_or_email>\033[0m")
         sys.exit(1)
 
-    target_file = ACCOUNTS_DIR / f"{name}.json"
-    if not target_file.exists():
-        print(f"\033[91m[Error] Account '{name}' not found!\033[0m")
+    target_file = find_account_file(identifier)
+    if not target_file:
+        print(f"\033[91m[Error] Account or email '{identifier}' not found!\033[0m")
         cmd_list()
         sys.exit(1)
 
     acc_obj = json.loads(target_file.read_text(encoding="utf-8"))
-    # Save back credential blob
     secret_str = json.dumps(acc_obj) if "token" in acc_obj else target_file.read_text(encoding="utf-8")
     cred_write(CRED_TARGET, secret_str, CRED_USER)
-    email_txt = f" ({acc_obj.get('email')})" if acc_obj.get("email") else ""
-    print(f"\033[1;32m[OK] Switched to account '{name}'{email_txt} successfully!\033[0m")
+    
+    email = acc_obj.get("email")
+    email_txt = f" ({email})" if email and target_file.stem != email else ""
+    print(f"\033[1;32m[OK] Switched to account '{target_file.stem}'{email_txt} successfully!\033[0m")
 
 
-def cmd_remove(name):
-    """Remove a saved account."""
-    if not name:
-        print("\033[91m[Error] Missing account name. Usage: agi-auth remove <name>\033[0m")
+def cmd_remove(identifier):
+    """Remove a saved account (by alias or email)."""
+    if not identifier:
+        print("\033[91m[Error] Missing account name or email. Usage: agi-auth remove <account_or_email>\033[0m")
         sys.exit(1)
 
-    target_file = ACCOUNTS_DIR / f"{name}.json"
-    if target_file.exists():
+    target_file = find_account_file(identifier)
+    if target_file and target_file.exists():
         target_file.unlink()
-        print(f"\033[1;32m[OK] Removed account '{name}'.\033[0m")
+        print(f"\033[1;32m[OK] Removed account '{target_file.stem}'.\033[0m")
     else:
-        print(f"\033[93m[!] Account '{name}' does not exist.\033[0m")
+        print(f"\033[93m[!] Account '{identifier}' does not exist.\033[0m")
 
 
 def print_help():
     print("""\033[1;36magi-auth\033[0m - Multi-account manager for Antigravity CLI (agy)
 
 \033[1mUsage:\033[0m
-  agi-auth login <name>     Đăng nhập / Đăng ký tài khoản <name>
+  agi-auth login [name]     Đăng nhập OAuth tài khoản Google (tự lưu theo Email)
   agi-auth list             Xem danh sách tài khoản, Email & Quota (5h/weekly)
-  agi-auth switch <name>    Chuyển sang tài khoản <name>
-  agi-auth remove <name>    Xóa tài khoản <name>
+  agi-auth switch <acc/email>  Chuyển sang tài khoản (bằng Tên hoặc Email)
+  agi-auth remove <acc/email>  Xóa tài khoản (bằng Tên hoặc Email)
 
 \033[1mQuick Run:\033[0m
   agi                       Chạy agy với --dangerously-skip-permissions

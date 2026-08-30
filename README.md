@@ -22,12 +22,13 @@ irm https://raw.githubusercontent.com/DK625/agy-auth/main/install.ps1 | iex
 
 ## 🚀 Usage
 
-### 1. Đăng nhập / Đăng ký tài khoản
+### 1. Đăng nhập tài khoản mới (Mở trình duyệt trực tiếp)
 ```bash
-agi-auth login acc1
+agi-auth login
 ```
-* **Tự động liên kết:** Nếu đang có sẵn phiên đăng nhập, hệ thống tự lấy Email Google (`@gmail.com`) và lưu thành `acc1`.
-* **Đăng nhập tài khoản mới:** Mở trình duyệt xác thực Google OAuth và lưu thành profile mới.
+* **Mở trực tiếp link/trình duyệt** để xác thực Google OAuth (tương tự lệnh `/login` trong `agy`).
+* Sau khi đăng nhập thành công, hệ thống **tự động lấy Email Google (`@gmail.com`) và lưu thành profile**.
+* Bạn cũng có thể đặt tên tùy chọn: `agi-auth login acc2`.
 
 ### 2. Xem danh sách tài khoản, Email & Quota (5h / 7d)
 ```bash
@@ -41,20 +42,23 @@ Output:
     ├─ Weekly Limit: 100%
     └─ Plan / Tier:  Standard
 
-   acc2 (work-email@company.com) [○ inactive]
+   work@company.com [○ inactive]
     ├─ 5h Limit:     85% (reset 23:45)
     ├─ Weekly Limit: 92%
     └─ Plan / Tier:  Pro
 ```
 
 ### 3. Chuyển đổi tài khoản (Switch)
+Hỗ trợ chuyển bằng **Tên profile** hoặc **Email Google**:
 ```bash
-agi-auth switch acc2
+agi-auth switch minhha10c8@gmail.com
+# hoặc: agi-auth switch acc1
 ```
 
 ### 4. Xóa tài khoản
 ```bash
-agi-auth remove acc2
+agi-auth remove work@company.com
+# hoặc: agi-auth remove acc2
 ```
 
 ---
@@ -70,7 +74,8 @@ agi
 ---
 
 ## 🛠️ How it works
-* **Lấy Email tự động:** Trích xuất email thật từ Google OAuth userinfo API.
+* **Mở OAuth trực tiếp:** Chạy thẳng luồng xác thực Google OAuth không bắt nhập tên thủ công.
+* **Tự động nhận diện Email:** Trích xuất email thật từ Google OAuth userinfo API.
 * **Theo dõi Quota:** Tự động lấy và hiển thị hạn mức 5h (5-hour limit), Weekly Limit (7-day limit) và gói Plan / Tier.
 * **Bảo mật:** Lưu trữ an toàn bằng Windows Credential Manager (`advapi32.dll`) trên Windows và Keyring trên Unix.
 * **Zero Dependency:** Sử dụng thuần Python Standard Library.
