@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+"""
+agi-auth: Simple multi-account manager for Antigravity CLI (agy)
+Author: DK625
+"""
+
+import sys
+import os
+import json
+import subprocess
+import hashlib
+from pathlib import Path
+
+ACCOUNTS_DIR = Path.home() / ".gemini" / "accounts"
+CRED_TARGET = "gemini:antigravity"
+CRED_USER = "antigravity"
+
+if os.name == "nt":
+    import ctypes
+    from ctypes import wintypes
+
+    class CREDENTIAL(ctypes.Structure):
+        _fields_ = [
+            ("Flags", wintypes.DWORD),
+            ("Type", wintypes.DWORD),
+            ("TargetName", wintypes.LPWSTR),
+            ("Comment", wintypes.LPWSTR),
+            ("LastWritten", wintypes.FILETIME),
+            ("CredentialBlobSize", wintypes.DWORD),
+            ("CredentialBlob", ctypes.POINTER(ctypes.c_char)),
+            ("Persist", wintypes.DWORD),
+            ("AttributeCount", wintypes.DWORD),
+            ("Attributes", ctypes.c_void_p),
+            ("TargetAlias", wintypes.LPWSTR),
+            ("UserName", wintypes.LPWSTR),
+        ]
+
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    PCRED = ctypes.POINTER(CREDENTIAL)
+    advapi32.CredReadW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.POINTER(PCRED)]
+    advapi32.CredWriteW.argtypes = [PCRED, wintypes.DWORD]
+    advapi32.CredDeleteW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD]
+    advapi32.CredFree.argtypes = [ctypes.c_void_p]
+    advapi32.CredFree.restype = None
+
+    def cred_read(target=CRED_TARGET):
+        p = PCRED()
+        if not advapi32.CredReadW(target, 1, 0, ctypes.byref(p)):
+            return None
+        try:
+            return ctypes.string_at(p.contents.CredentialBlob, p.contents.CredentialBlobSize).decode("utf-8")
+        finally:
+            advapi32.CredFree(p)
+
+    def cred_write(target=CRED_TARGET, secret="", user=CRED_USER):
+        blob = secret.encode("utf-8")
+        buf = ctypes.create_string_buffer(blob, len(blob))
+        c = CREDENTIAL()
+        c.Type = 1
+        c.TargetName = target
+        c.UserName = user
+        c.CredentialBlobSize = len(blob)
+        c.CredentialBlob = ctypes.cast(buf, ctypes.POINTER(ctypes.c_char))
+        c.Persist = 2
+        if not advapi32.CredWriteW(ctypes.byref(c), 0):
+            raise OSError(f"CredWriteW failed with error code {ctypes.get_last_error()}")
+
+    def cred_delete(target=CRED_TARGET):
+        return bool(advapi32.CredDeleteW(target, 1, 0))
+
+else:
+    def cred_read(target=CRED_TARGET):
+        if sys.platform == "darwin":
+            try:
+                res = subprocess.run(
+                    ["security", "find-generic-password", "-s", target, "-w"],
+                    capture_output=True, text=True, check=True
+                )
+                return res.stdout.strip()
+            except Exception:
+                pass
+        else:
+            try:
+                res = subprocess.run(
+                    ["secret-tool", "lookup", "service", target],
+                    capture_output=True, text=True, check=True
+                )
+                return res.stdout.strip()
+            except Exception:
+                pass
+        
+        fallback_file = Path.home() / ".gemini" / ".active_session.json"
+        if fallback_file.exists():
+            return fallback_file.read_text(encoding="utf-8")
+        return None
+
+    def cred_write(target=CRED_TARGET, secret="", user=CRED_USER):
+        if sys.platform == "darwin":
+            try:
+                subprocess.run(["security", "delete-generic-password", "-s", target], capture_output=True)
+                subprocess.run(
+                    ["security", "add-generic-password", "-s", target, "-a", user, "-w", secret],
+                    capture_output=True, check=True
+                )
+                return
+            except Exception:
+                pass
+        else:
+            try:
+                subprocess.run(
+                    ["secret-tool", "store", "--label=Antigravity", "service", target, "username", user],
+                    input=secret.encode("utf-8"), capture_output=True, check=True
+                )
+                return
+            except Exception:
+                pass
+
+        fallback_file = Path.home() / ".gemini" / ".active_session.json"
+        fallback_file.parent.mkdir(parents=True, exist_ok=True)
+        fallback_file.write_text(secret, encoding="utf-8")
+
+    def cred_delete(target=CRED_TARGET):
+        if sys.platform == "darwin":
+            res = subprocess.run(["security", "delete-generic-password", "-s", target], capture_output=True)
+            return res.returncode == 0
+        else:
+            res = subprocess.run(["secret-tool", "clear", "service", target], capture_output=True)
+            if res.returncode == 0:
+                return True
+        fallback_file = Path.home() / ".gemini" / ".active_session.json"
+        if fallback_file.exists():
+            fallback_file.unlink()
+            return True
+        return False
+
+
+def get_token_key(json_str):
+    if not json_str:
+        return None
+    try:
+        data = json.loads(json_str)
+        return data.get("token", {}).get("refresh_token") or hashlib.sha256(json_str.encode()).hexdigest()
+    except Exception:
+        return json_str.strip()
+
+
+def cmd_list():
+    ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
+    saved_files = sorted(ACCOUNTS_DIR.glob("*.json"))
+    if not saved_files:
+        print("\033[93m[!] No saved accounts yet. Use 'agi-auth login <name>' to add an account.\033[0m")
+        return
+
+    curr_raw = cred_read()
+    curr_key = get_token_key(curr_raw)
+
+    print("\033[1;36m=== Antigravity Accounts ===\033[0m")
+    for f in saved_files:
+        acc_name = f.stem
+        try:
+            content = f.read_text(encoding="utf-8")
+            saved_key = get_token_key(content)
+            if curr_key and saved_key == curr_key:
+                print(f"  \033[1;32m* {acc_name}\033[0m \033[32m(active)\033[0m")
+            else:
+                print(f"    \033[90m{acc_name}\033[0m")
+        except Exception:
+            print(f"    {acc_name} (corrupt)")
+    print()
+
+
+def cmd_switch(name):
+    if not name:
+        print("\033[91m[Error] Missing account name. Usage: agi-auth switch <name>\033[0m")
+        sys.exit(1)
+
+    target_file = ACCOUNTS_DIR / f"{name}.json"
+    if not target_file.exists():
+        print(f"\033[91m[Error] Account '{name}' not found!\033[0m")
+        cmd_list()
+        sys.exit(1)
+
+    secret = target_file.read_text(encoding="utf-8")
+    cred_write(CRED_TARGET, secret, CRED_USER)
+    print(f"\033[1;32m[OK] Switched to account '{name}' successfully!\033[0m")
+
+
+def cmd_remove(name):
+    if not name:
+        print("\033[91m[Error] Missing account name. Usage: agi-auth remove <name>\033[0m")
+        sys.exit(1)
+
+    target_file = ACCOUNTS_DIR / f"{name}.json"
+    if target_file.exists():
+        target_file.unlink()
+        print(f"\033[1;32m[OK] Removed account '{name}'.\033[0m")
+    else:
+        print(f"\033[93m[!] Account '{name}' does not exist.\033[0m")
+
+
+def cmd_login(name=None):
+    if not name:
+        if len(sys.argv) > 2:
+            name = sys.argv[2]
+        else:
+            try:
+                name = input("Enter a name for this account (e.g. acc1, work): ").strip()
+            except (KeyboardInterrupt, EOFError):
+                print("\nAborted.")
+                sys.exit(0)
+
+    if not name:
+        print("\033[91m[Error] Account name cannot be empty.\033[0m")
+        sys.exit(1)
+
+    ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
+    target_file = ACCOUNTS_DIR / f"{name}.json"
+
+    cred_delete(CRED_TARGET)
+    print(f"\033[1;36m[>] Starting Antigravity CLI to authenticate account '{name}'...\033[0m")
+    print("\033[90mPlease complete login in your browser if prompted.\033[0m")
+
+    try:
+        subprocess.run(["agy"], check=False)
+    except FileNotFoundError:
+        print("\033[91m[Error] 'agy' command not found in PATH!\033[0m")
+        sys.exit(1)
+
+    new_cred = cred_read(CRED_TARGET)
+    if new_cred:
+        target_file.write_text(new_cred, encoding="utf-8")
+        print(f"\033[1;32m[OK] Login successful! Saved account as '{name}'.\033[0m")
+    else:
+        print("\033[91m[Error] No new credential detected after login.\033[0m")
+
+
+def print_help():
+    print("""\033[1;36magi-auth\033[0m - Multi-account manager for Antigravity CLI (agy)
+
+\033[1mUsage:\033[0m
+  agi-auth login <name>     Log in to a new account and save as <name>
+  agi-auth list             List all saved accounts
+  agi-auth switch <name>    Switch to saved account <name> (alias: use)
+  agi-auth remove <name>    Remove saved account <name> (alias: rm)
+
+\033[1mQuick Run:\033[0m
+  agi                       Run agy with --dangerously-skip-permissions
+""")
+
+
+def main():
+    if len(sys.argv) < 2:
+        print_help()
+        return
+
+    action = sys.argv[1].lower()
+    arg = sys.argv[2] if len(sys.argv) > 2 else None
+
+    if action in ("login", "signin"):
+        cmd_login(arg)
+    elif action in ("list", "ls"):
+        cmd_list()
+    elif action in ("switch", "use"):
+        cmd_switch(arg)
+    elif action in ("remove", "rm", "delete"):
+        cmd_remove(arg)
+    elif action in ("help", "--help", "-h"):
+        print_help()
+    else:
+        print(f"\033[91mUnknown command: {action}\033[0m\n")
+        print_help()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
