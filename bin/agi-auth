@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 agi-auth: Simple multi-account manager for Antigravity CLI (agy)
 Author: DK625
@@ -402,7 +402,7 @@ def perform_direct_google_oauth(name=None):
                 </head>
                 <body>
                     <div class="card">
-                        <h2>✔ Authentication Successful!</h2>
+                        <h2>âœ” Authentication Successful!</h2>
                         <p>You can close this tab and return to your terminal.</p>
                     </div>
                     <script>setTimeout(function(){ window.close(); }, 3000);</script>
@@ -506,7 +506,7 @@ def perform_direct_google_oauth(name=None):
     email = fetch_account_email(access_token)
 
     agy_credential_obj = {
-        "auth_method": "oauth",
+        "auth_method": "consumer",
         "token": {
             "access_token": access_token,
             "token_type": "Bearer",
@@ -572,13 +572,13 @@ def print_help():
     print("""\033[1;36magi-auth\033[0m - Multi-account manager for Antigravity CLI (agy)
 
 \033[1mUsage:\033[0m
-  agi-auth login [name]        Đăng nhập Google OAuth (Mở trình duyệt trực tiếp)
-  agi-auth list                Xem danh sách tài khoản, Email & Quota (5h/weekly)
-  agi-auth switch <num/email>  Chuyển sang tài khoản (bằng Số thứ tự hoặc Email)
-  agi-auth remove <num/email>  Xóa tài khoản (bằng Số thứ tự hoặc Email)
+  agi-auth login [name]        ÄÄƒng nháº­p Google OAuth (Má»Ÿ trÃ¬nh duyá»‡t trá»±c tiáº¿p)
+  agi-auth list                Xem danh sÃ¡ch tÃ i khoáº£n, Email & Quota (5h/weekly)
+  agi-auth switch <num/email>  Chuyá»ƒn sang tÃ i khoáº£n (báº±ng Sá»‘ thá»© tá»± hoáº·c Email)
+  agi-auth remove <num/email>  XÃ³a tÃ i khoáº£n (báº±ng Sá»‘ thá»© tá»± hoáº·c Email)
 
 \033[1mQuick Run:\033[0m
-  agi                          Chạy agy với --dangerously-skip-permissions
+  agi                          Cháº¡y agy vá»›i --dangerously-skip-permissions
 """)
 
 
@@ -608,3 +608,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
