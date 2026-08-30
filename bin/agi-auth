@@ -322,14 +322,14 @@ def format_relative_time(mtime, is_active=False):
 
 
 def format_usage_dt(q_data):
-    """Calculate USAGE percentage and format reset time (HH:mm on dd MMM)."""
+    """Calculate REMAINING quota percentage and format reset time (HH:mm on dd MMM)."""
     if not q_data:
         return "-"
     rem = q_data.get("remaining_fraction")
     if rem is None:
         return "-"
-    usage_pct = int(round((1.0 - float(rem)) * 100))
-    usage_str = f"{usage_pct}%"
+    remain_pct = int(round(float(rem) * 100))
+    remain_str = f"{remain_pct}%"
     
     res = q_data.get("reset_time")
     if res:
@@ -337,8 +337,8 @@ def format_usage_dt(q_data):
         if dt:
             local_dt = dt.astimezone()
             time_str = local_dt.strftime("%H:%M on %d %b")
-            return f"{usage_str} ({time_str})"
-    return usage_str
+            return f"{remain_str} ({time_str})"
+    return remain_str
 
 
 def parse_google_rpc_error(err_json, http_code=403):
@@ -504,7 +504,7 @@ def cmd_list():
     curr_key = get_token_key(curr_raw)
     quota_info = get_cached_quota()
 
-    header = "     ACCOUNT                         PLAN            5H USAGE                WEEKLY USAGE           LAST ACTIVITY"
+    header = "     ACCOUNT                         PLAN            5H REMAIN               WEEKLY REMAIN          LAST ACTIVITY"
     print(header)
     print("-" * len(header))
 
