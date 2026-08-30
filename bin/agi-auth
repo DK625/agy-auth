@@ -520,6 +520,18 @@ def cmd_list():
             saved_key = get_token_key(content)
             is_active = bool(curr_key and saved_key == curr_key)
             email = acc_obj.get("email") or f.stem
+
+            # Always sync active token from Credential Vault if currently active
+            if is_active and curr_raw:
+                try:
+                    curr_obj = json.loads(curr_raw)
+                    vault_tok = curr_obj.get("token")
+                    if vault_tok and vault_tok.get("access_token") != acc_obj.get("token", {}).get("access_token"):
+                        acc_obj["token"] = vault_tok
+                        f.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
+                except Exception:
+                    pass
+
             acc_records.append({
                 "file": f,
                 "obj": acc_obj,
