@@ -251,8 +251,8 @@ def check_account_health(access_token):
     """Check account eligibility & TOS status against CloudCode backend."""
     if not access_token:
         return {"status": "401", "message": "Missing Token"}
-    
-    # 1. Check loadCodeAssist for TOS acceptance requirement
+
+    # 1. Check loadCodeAssist for TOS / Suspension / Ineligibility
     url_lca = "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist"
     try:
         req = urllib.request.Request(
@@ -260,21 +260,39 @@ def check_account_health(access_token):
             data=b"{}",
             headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
         )
-        with urllib.request.urlopen(req, timeout=2.5) as resp:
+        with urllib.request.urlopen(req, timeout=3) as resp:
             lca_data = json.loads(resp.read().decode())
-            for t in lca_data.get("ineligibleTiers", []):
-                if t.get("reasonCode") == "GOOGLE_TOS_NOT_SUPPORTED_BY_CLIENT":
+            inelig = lca_data.get("ineligibleTiers", [])
+            for t in inelig:
+                code = t.get("reasonCode")
+                if code == "GOOGLE_TOS_NOT_SUPPORTED_BY_CLIENT":
                     return {
                         "status": "TOS Required",
                         "message": "Google TOS not accepted on web. Visit https://antigravity.google to activate."
                     }
     except urllib.error.HTTPError as e:
-        if e.code == 401:
-            return {"status": "401", "message": "Token expired / Unauthorized"}
+        body = e.read().decode("utf-8", errors="ignore")
+        try:
+            err_json = json.loads(body).get("error", {})
+            for d in err_json.get("details", []):
+                reason = d.get("reason", "")
+                if reason == "TOS_VIOLATION":
+                    appeal_url = d.get("metadata", {}).get("appeal_url")
+                    return {
+                        "status": "Disabled (TOS)",
+                        "message": err_json.get("message", "Service disabled for TOS violation"),
+                        "appeal_url": appeal_url
+                    }
+            if e.code == 401:
+                return {"status": "401", "message": "Token expired / Unauthorized"}
+            if e.code == 403:
+                return {"status": "403 Forbidden", "message": err_json.get("message", "Forbidden")}
+        except Exception:
+            return {"status": str(e.code), "message": f"HTTP {e.code}"}
     except Exception:
         pass
 
-    # 2. Check retrieveUserQuotaSummary for Account Verification requirements
+    # 2. Check retrieveUserQuotaSummary for Account Verification / License
     url_rqs = "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"
     try:
         req = urllib.request.Request(
@@ -282,18 +300,25 @@ def check_account_health(access_token):
             data=b"{}",
             headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
         )
-        with urllib.request.urlopen(req, timeout=2.5) as resp:
+        with urllib.request.urlopen(req, timeout=3) as resp:
             return {"status": "OK", "message": "OK"}
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="ignore")
         try:
             err_json = json.loads(body).get("error", {})
             for d in err_json.get("details", []):
-                if d.get("reason") == "VALIDATION_REQUIRED":
+                reason = d.get("reason", "")
+                if reason == "VALIDATION_REQUIRED":
                     return {
                         "status": "Verify Required",
                         "message": "Account verification required by Google in browser",
                         "validation_url": d.get("metadata", {}).get("validation_url")
+                    }
+                elif reason == "TOS_VIOLATION":
+                    return {
+                        "status": "Disabled (TOS)",
+                        "message": err_json.get("message", "Service disabled for TOS violation"),
+                        "appeal_url": d.get("metadata", {}).get("appeal_url")
                     }
             if e.code == 401:
                 return {"status": "401", "message": "Token expired / Unauthorized"}
@@ -449,9 +474,12 @@ def cmd_list():
             st = h["status"]
             msg = h["message"]
             v_url = h.get("validation_url")
+            app_url = h.get("appeal_url")
             print(f"  \033[1;31m• {em}\033[0m: \033[1m{st}\033[0m - {msg}")
             if v_url:
                 print(f"    \033[90m-> Mở link này để xác thực tài khoản:\033[0m\n    \033[4;36m{v_url}\033[0m")
+            if app_url:
+                print(f"    \033[90m-> Gửi đơn kháng nghị (Submit Appeal):\033[0m\n    \033[4;36m{app_url}\033[0m")
 
 
 def perform_direct_google_oauth(name=None):
