@@ -33,7 +33,6 @@ QUOTA_CACHE_FILE = Path.home() / ".gemini" / "quota_cache.json"
 CRED_TARGET = "gemini:antigravity"
 CRED_USER = "antigravity"
 
-# Google OAuth Constants for Antigravity CLI
 OAUTH_CLIENT_ID = "884354919052-36trc1jjb3tguiac32ov6cod268c5blh.apps.googleusercontent.com"
 OAUTH_SCOPES = [
     "openid",
@@ -268,17 +267,19 @@ def cmd_list():
                         acc_obj["email"] = email
                         f.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
 
+                # Auto-normalize alias filename to email filename if email is available
+                if email and acc_name != email and not (ACCOUNTS_DIR / f"{email}.json").exists():
+                    try:
+                        f.rename(ACCOUNTS_DIR / f"{email}.json")
+                        acc_name = email
+                    except Exception:
+                        pass
+
                 status_tag = "\033[1;32m● active\033[0m" if is_active else "\033[90m○ inactive\033[0m"
                 marker = "\033[1;32m*\033[0m" if is_active else " "
 
-                if email and acc_name == email:
-                    display_header = f" {marker} \033[1;36m{email}\033[0m [{status_tag}]"
-                elif email:
-                    display_header = f" {marker} \033[1m{acc_name}\033[0m \033[36m({email})\033[0m [{status_tag}]"
-                else:
-                    display_header = f" {marker} \033[1m{acc_name}\033[0m [{status_tag}]"
-
-                print(display_header)
+                displayName = email if email else acc_name
+                print(f" {marker} \033[1;36m{displayName}\033[0m [{status_tag}]")
 
                 q_5h = "100%"
                 q_7d = "100%"
@@ -318,7 +319,6 @@ def cmd_list():
 
 def perform_direct_google_oauth(name=None):
     """Direct Google OAuth PKCE flow (opens browser, receives token, saves profile)."""
-    # Generate PKCE verifier and challenge
     verifier = secrets.token_urlsafe(64)
     digest = hashlib.sha256(verifier.encode("ascii")).digest()
     challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
@@ -328,7 +328,7 @@ def perform_direct_google_oauth(name=None):
 
     class OAuthHandler(http.server.BaseHTTPRequestHandler):
         def log_message(self, format, *args):
-            pass  # Suppress default server logs
+            pass
 
         def do_GET(self):
             parsed = urllib.parse.urlparse(self.path)
@@ -371,7 +371,6 @@ def perform_direct_google_oauth(name=None):
                 self.send_response(404)
                 self.end_headers()
 
-    # Start server on local ephemeral port
     server = socketserver.TCPServer(("127.0.0.1", 0), OAuthHandler)
     port = server.server_address[1]
     redirect_uri = f"http://127.0.0.1:{port}"
@@ -391,13 +390,11 @@ def perform_direct_google_oauth(name=None):
     print("\033[1;36m[>] Opening Google OAuth in your browser...\033[0m")
     print(f"\033[90mIf your browser does not open automatically, copy and open this URL:\033[0m\n\033[4;34m{auth_url}\033[0m\n")
 
-    # Try opening browser
     try:
         webbrowser.open(auth_url)
     except Exception:
         pass
 
-    # Wait for OAuth callback in thread
     server_thread = threading.Thread(target=server.handle_request)
     server_thread.daemon = True
     server_thread.start()
@@ -422,7 +419,6 @@ def perform_direct_google_oauth(name=None):
         print("\033[91m[Error] Did not receive authorization code.\033[0m")
         return
 
-    # Exchange code for token
     token_url = "https://oauth2.googleapis.com/token"
     token_payload = urllib.parse.urlencode({
         "client_id": OAUTH_CLIENT_ID,
@@ -446,10 +442,8 @@ def perform_direct_google_oauth(name=None):
     expiry_dt = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
     expiry_iso = expiry_dt.isoformat()
 
-    # Get Google email
     email = fetch_account_email(access_token)
 
-    # Format exactly as Antigravity / Gemini expects
     agy_credential_obj = {
         "auth_method": "oauth",
         "token": {
@@ -463,18 +457,14 @@ def perform_direct_google_oauth(name=None):
         agy_credential_obj["email"] = email
 
     cred_json_str = json.dumps(agy_credential_obj)
-
-    # Save to Windows Credential Manager
     cred_write(CRED_TARGET, cred_json_str, CRED_USER)
 
-    # Save profile to accounts directory
     profile_name = name if name else (email if email else f"account_{int(time.time())}")
     ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
     target_file = ACCOUNTS_DIR / f"{profile_name}.json"
     target_file.write_text(json.dumps(agy_credential_obj, indent=2), encoding="utf-8")
 
-    email_txt = f" ({email})" if email and profile_name != email else ""
-    print(f"\n\033[1;32m[OK] Login successful! Saved account profile as '{profile_name}'{email_txt}.\033[0m")
+    print(f"\n\033[1;32m[OK] Login successful! Saved account as '{profile_name}'.\033[0m")
 
 
 def cmd_login(name=None):
@@ -499,8 +489,8 @@ def cmd_switch(identifier):
     cred_write(CRED_TARGET, secret_str, CRED_USER)
     
     email = acc_obj.get("email")
-    email_txt = f" ({email})" if email and target_file.stem != email else ""
-    print(f"\033[1;32m[OK] Switched to account '{target_file.stem}'{email_txt} successfully!\033[0m")
+    display_txt = email if email else target_file.stem
+    print(f"\033[1;32m[OK] Switched to account '{display_txt}' successfully!\033[0m")
 
 
 def cmd_remove(identifier):
@@ -523,8 +513,8 @@ def print_help():
 \033[1mUsage:\033[0m
   agi-auth login [name]        Đăng nhập Google OAuth (Mở trình duyệt trực tiếp)
   agi-auth list                Xem danh sách tài khoản, Email & Quota (5h/weekly)
-  agi-auth switch <acc/email>  Chuyển sang tài khoản (bằng Tên hoặc Email)
-  agi-auth remove <acc/email>  Xóa tài khoản (bằng Tên hoặc Email)
+  agi-auth switch <email/acc>  Chuyển sang tài khoản (bằng Email hoặc Tên)
+  agi-auth remove <email/acc>  Xóa tài khoản (bằng Email hoặc Tên)
 
 \033[1mQuick Run:\033[0m
   agi                          Chạy agy với --dangerously-skip-permissions
