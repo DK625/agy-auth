@@ -152,51 +152,6 @@ def get_token_key(json_str):
         return json_str.strip()
 
 
-def cmd_save(name):
-    """Save current active session under a name."""
-    if not name:
-        print("\033[91m[Error] Missing account name. Usage: agi-auth save <name>\033[0m")
-        sys.exit(1)
-
-    curr_raw = cred_read()
-    if not curr_raw:
-        print("\033[91m[Error] No active login found to save! Please login first with 'agi-auth login <name>'.\033[0m")
-        sys.exit(1)
-
-    ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
-    target_file = ACCOUNTS_DIR / f"{name}.json"
-    target_file.write_text(curr_raw, encoding="utf-8")
-    print(f"\033[1;32m[OK] Saved current active session as '{name}' successfully!\033[0m")
-
-
-def cmd_current():
-    """Show currently active account."""
-    curr_raw = cred_read()
-    if not curr_raw:
-        print("\033[93m[!] No active Antigravity session found.\033[0m")
-        return
-
-    curr_key = get_token_key(curr_raw)
-    ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
-    saved_files = sorted(ACCOUNTS_DIR.glob("*.json"))
-
-    matched = None
-    for f in saved_files:
-        try:
-            content = f.read_text(encoding="utf-8")
-            if get_token_key(content) == curr_key:
-                matched = f.stem
-                break
-        except Exception:
-            pass
-
-    if matched:
-        print(f"\033[1;32mCurrent active account: {matched}\033[0m")
-    else:
-        print("\033[1;33mCurrent session is active, but not saved in accounts list yet.\033[0m")
-        print("\033[90m-> Run 'agi-auth save <name>' to save this account profile.\033[0m")
-
-
 def cmd_list():
     """List all saved accounts & show live status."""
     ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -223,10 +178,71 @@ def cmd_list():
 
     if curr_raw and not has_active_match:
         print("  \033[1;33m* (current active session - unsaved)\033[0m")
-        print("\n\033[90m-> Dang co 1 phien dang nhap. Chay lenh: agi-auth save <name> de luu lai (vd: agi-auth save acc1)\033[0m")
+        print("\n\033[90m-> Chay: agi-auth login <name> de luu phien nay (vd: agi-auth login acc1)\033[0m")
     elif not saved_files and not curr_raw:
-        print("\033[93m[!] No saved accounts or active session. Use 'agi-auth login <name>' to add an account.\033[0m")
+        print("\033[93m[!] No saved accounts. Run 'agi-auth login <name>' to login.\033[0m")
     print()
+
+
+def cmd_login(name=None):
+    """Log in / register an account."""
+    if not name:
+        if len(sys.argv) > 2:
+            name = sys.argv[2]
+        else:
+            try:
+                name = input("Enter account name (e.g. acc1, acc2): ").strip()
+            except (KeyboardInterrupt, EOFError):
+                print("\nAborted.")
+                sys.exit(0)
+
+    if not name:
+        print("\033[91m[Error] Account name cannot be empty.\033[0m")
+        sys.exit(1)
+
+    ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
+    target_file = ACCOUNTS_DIR / f"{name}.json"
+
+    curr_raw = cred_read()
+    curr_key = get_token_key(curr_raw)
+
+    # Check if this name is already saved or if current session is not saved yet
+    saved_files = sorted(ACCOUNTS_DIR.glob("*.json"))
+    has_active_match = False
+    for f in saved_files:
+        try:
+            if get_token_key(f.read_text(encoding="utf-8")) == curr_key:
+                has_active_match = True
+                break
+        except Exception:
+            pass
+
+    force_new = "--new" in sys.argv or "--force" in sys.argv
+
+    # If user currently has an active unsaved session, save it directly under this name!
+    if curr_raw and not has_active_match and not force_new:
+        target_file.write_text(curr_raw, encoding="utf-8")
+        print(f"\033[1;32m[OK] Successfully linked current active session as '{name}'!\033[0m")
+        print("\033[90m(To login to a brand new Google account instead, run: agi-auth login <name> --new)\033[0m")
+        return
+
+    # Otherwise, clear active session and open agy for OAuth login
+    cred_delete(CRED_TARGET)
+    print(f"\033[1;36m[>] Starting Antigravity CLI to authenticate account '{name}'...\033[0m")
+    print("\033[90mPlease complete login in your browser if prompted.\033[0m")
+
+    try:
+        subprocess.run(["agy"], check=False)
+    except FileNotFoundError:
+        print("\033[91m[Error] 'agy' command not found in PATH!\033[0m")
+        sys.exit(1)
+
+    new_cred = cred_read(CRED_TARGET)
+    if new_cred:
+        target_file.write_text(new_cred, encoding="utf-8")
+        print(f"\033[1;32m[OK] Login successful! Saved account as '{name}'.\033[0m")
+    else:
+        print("\033[91m[Error] No new credential detected after login.\033[0m")
 
 
 def cmd_switch(name):
@@ -260,56 +276,17 @@ def cmd_remove(name):
         print(f"\033[93m[!] Account '{name}' does not exist.\033[0m")
 
 
-def cmd_login(name=None):
-    """Log in to a new account and save it."""
-    if not name:
-        if len(sys.argv) > 2:
-            name = sys.argv[2]
-        else:
-            try:
-                name = input("Enter a name for this account (e.g. acc1, work): ").strip()
-            except (KeyboardInterrupt, EOFError):
-                print("\nAborted.")
-                sys.exit(0)
-
-    if not name:
-        print("\033[91m[Error] Account name cannot be empty.\033[0m")
-        sys.exit(1)
-
-    ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
-    target_file = ACCOUNTS_DIR / f"{name}.json"
-
-    cred_delete(CRED_TARGET)
-    print(f"\033[1;36m[>] Starting Antigravity CLI to authenticate account '{name}'...\033[0m")
-    print("\033[90mPlease complete login in your browser if prompted.\033[0m")
-
-    try:
-        subprocess.run(["agy"], check=False)
-    except FileNotFoundError:
-        print("\033[91m[Error] 'agy' command not found in PATH!\033[0m")
-        sys.exit(1)
-
-    new_cred = cred_read(CRED_TARGET)
-    if new_cred:
-        target_file.write_text(new_cred, encoding="utf-8")
-        print(f"\033[1;32m[OK] Login successful! Saved account as '{name}'.\033[0m")
-    else:
-        print("\033[91m[Error] No new credential detected after login.\033[0m")
-
-
 def print_help():
     print("""\033[1;36magi-auth\033[0m - Multi-account manager for Antigravity CLI (agy)
 
 \033[1mUsage:\033[0m
-  agi-auth save <name>      Luu phien dang dang nhap hien tai thanh <name>
-  agi-auth list             Xem danh sach tai khoan da luu & phien active
-  agi-auth current          Xem tai khoan dang active hien tai
-  agi-auth switch <name>    Chuyen sang tai khoan <name> (alias: use)
-  agi-auth login <name>     Dang nhap tai khoan moi va luu thanh <name>
-  agi-auth remove <name>    Xoa tai khoan <name> (alias: rm)
+  agi-auth login <name>     Đăng nhập / Đăng ký tài khoản <name>
+  agi-auth list             Xem danh sách tài khoản
+  agi-auth switch <name>    Chuyển sang tài khoản <name>
+  agi-auth remove <name>    Xóa tài khoản <name>
 
 \033[1mQuick Run:\033[0m
-  agi                       Chay agy voi --dangerously-skip-permissions
+  agi                       Chạy agy với --dangerously-skip-permissions
 """)
 
 
@@ -321,11 +298,7 @@ def main():
     action = sys.argv[1].lower()
     arg = sys.argv[2] if len(sys.argv) > 2 else None
 
-    if action in ("save",):
-        cmd_save(arg)
-    elif action in ("current", "whoami"):
-        cmd_current()
-    elif action in ("login", "signin"):
+    if action in ("login", "signin"):
         cmd_login(arg)
     elif action in ("list", "ls"):
         cmd_list()

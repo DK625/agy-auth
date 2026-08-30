@@ -1,4 +1,4 @@
-﻿# agi-auth
+﻿# agy-auth
 
 > Lightweight multi-account manager & shortcut CLI for Google Antigravity CLI (`agy`).
 
@@ -22,40 +22,32 @@ irm https://raw.githubusercontent.com/DK625/agy-auth/main/install.ps1 | iex
 
 ## 🚀 Usage
 
-### 1. Lưu phiên đang đăng nhập hiện tại
+### 1. Đăng nhập / Đăng ký tài khoản
 ```bash
-agi-auth save acc1
+agi-auth login acc1
 ```
-> Lưu lại phiên bạn đang dùng thành profile `acc1` mà không cần phải đăng nhập lại.
+* Nếu đang có sẵn phiên đăng nhập: tự động nhận diện và lưu thành `acc1`.
+* Nếu muốn đăng nhập tài khoản Google mới: mở trình duyệt xác thực OAuth và lưu thành `acc2`.
 
-### 2. Đăng nhập tài khoản mới & lưu profile
-```bash
-agi-auth login acc2
-```
-> CLI sẽ mở trình duyệt để xác thực Google OAuth và tự động lưu phiên thành profile `acc2`.
-
-### 3. Xem danh sách các tài khoản & trạng thái active
+### 2. Xem danh sách các tài khoản
 ```bash
 agi-auth list
 ```
-Output ví dụ:
+Output:
 ```text
 === Antigravity Accounts ===
   * acc1 (active)
     acc2
-    work-email@gmail.com
 ```
 
-### 4. Chuyển đổi tài khoản (Switch)
+### 3. Chuyển đổi tài khoản (Switch)
 ```bash
 agi-auth switch acc2
-# hoặc: agi-auth use acc2
 ```
 
-### 5. Xóa tài khoản
+### 4. Xóa tài khoản
 ```bash
 agi-auth remove acc2
-# hoặc: agi-auth rm acc2
 ```
 
 ---
@@ -67,13 +59,6 @@ Tự động cấu hình lệnh `agi` chạy Antigravity CLI không cần xác n
 agi
 # Tương đương với: agy --dangerously-skip-permissions "$@"
 ```
-
----
-
-## 🛠️ How it works
-* **Windows:** Lưu trữ an toàn bằng Windows Credential Manager (`advapi32.dll`), sao lưu cấu hình vào `~/.gemini/accounts/`.
-* **Linux/macOS:** Tương thích với `secret-tool` / macOS Keychain.
-* **Không yêu cầu cài thêm package ngoài:** Sử dụng thuần Python Standard Library.
 
 ---
 
