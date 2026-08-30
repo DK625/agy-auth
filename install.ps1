@@ -8,7 +8,7 @@ $InstallDir = "$env:USERPROFILE\.agi-auth"
 $BinDir = "$InstallDir\bin"
 $GeminiDir = "$env:USERPROFILE\.gemini"
 $Timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-$BaseUrl = "https://raw.githubusercontent.com/DK625/agy-auth/main"
+$BaseUrl = "https://raw.githubusercontent.com/DK625/agy-auth/refs/heads/main"
 
 Write-Host "==> Installing / Updating agi-auth, agi shortcut and Statusline..." -ForegroundColor Cyan
 
@@ -114,3 +114,4 @@ Write-Host "  agi-auth remove <email> - Remove an account" -ForegroundColor Cyan
 Write-Host "  agi                     - Launch Antigravity CLI with statusline" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Ready to use! Try running: agi-auth list" -ForegroundColor Gray
+

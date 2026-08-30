@@ -9,7 +9,7 @@ INSTALL_DIR="$HOME/.agi-auth"
 BIN_DIR="$HOME/.local/bin"
 GEMINI_DIR="$HOME/.gemini"
 TIMESTAMP=$(date +%s)
-BASE_URL="https://raw.githubusercontent.com/DK625/agy-auth/main"
+BASE_URL="https://raw.githubusercontent.com/DK625/agy-auth/refs/heads/main"
 
 echo -e "\033[1;36m==>\033[0m \033[1mInstalling / Updating agi-auth, agi shortcut & Statusline...\033[0m"
 
@@ -83,3 +83,4 @@ echo -e "  \033[36magi-auth remove <email>\033[0m - Remove an account"
 echo -e "  \033[36magi\033[0m                     - Launch Antigravity CLI with statusline"
 echo ""
 echo -e "\033[90mRestart your terminal or run: source ~/.bashrc (or ~/.zshrc)\033[0m"
+
