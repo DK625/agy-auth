@@ -11,6 +11,13 @@ import subprocess
 import hashlib
 import time
 import urllib.request
+import urllib.parse
+import http.server
+import socketserver
+import threading
+import webbrowser
+import secrets
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 # Ensure UTF-8 output on Windows
@@ -25,6 +32,19 @@ ACCOUNTS_DIR = Path.home() / ".gemini" / "accounts"
 QUOTA_CACHE_FILE = Path.home() / ".gemini" / "quota_cache.json"
 CRED_TARGET = "gemini:antigravity"
 CRED_USER = "antigravity"
+
+# Google OAuth Constants for Antigravity CLI
+OAUTH_CLIENT_ID = "884354919052-36trc1jjb3tguiac32ov6cod268c5blh.apps.googleusercontent.com"
+OAUTH_SCOPES = [
+    "openid",
+    "email",
+    "profile",
+    "https://www.googleapis.com/auth/cloud-platform",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+    "https://www.googleapis.com/auth/cclog",
+    "https://www.googleapis.com/auth/experimentsandconfigs"
+]
 
 if os.name == "nt":
     import ctypes
@@ -204,12 +224,10 @@ def find_account_file(identifier):
     if not identifier:
         return None
     ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
-    # Direct match by filename
     direct = ACCOUNTS_DIR / f"{identifier}.json"
     if direct.exists():
         return direct
     
-    # Match by email inside json
     for f in ACCOUNTS_DIR.glob("*.json"):
         try:
             obj = json.loads(f.read_text(encoding="utf-8"))
@@ -242,7 +260,6 @@ def cmd_list():
                 if is_active:
                     has_active_match = True
 
-                # Get email
                 email = acc_obj.get("email")
                 if not email:
                     token = acc_obj.get("token", {}).get("access_token")
@@ -263,7 +280,6 @@ def cmd_list():
 
                 print(display_header)
 
-                # Show quota info for active account or from cached profile
                 q_5h = "100%"
                 q_7d = "100%"
                 tier_str = "Standard"
@@ -287,7 +303,6 @@ def cmd_list():
                 print(f"    {acc_name} (corrupt: {e})")
 
     if curr_raw and not has_active_match:
-        # Detect email of current unsaved session
         curr_token = None
         try:
             curr_token = json.loads(curr_raw).get("token", {}).get("access_token")
@@ -301,71 +316,170 @@ def cmd_list():
         print("\033[93m[!] No saved accounts. Run 'agi-auth login' to login.\033[0m\n")
 
 
-def cmd_login(name=None):
-    """Directly triggers Google OAuth login and automatically saves by Email."""
-    ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
-    curr_raw = cred_read()
-    curr_key = get_token_key(curr_raw)
+def perform_direct_google_oauth(name=None):
+    """Direct Google OAuth PKCE flow (opens browser, receives token, saves profile)."""
+    # Generate PKCE verifier and challenge
+    verifier = secrets.token_urlsafe(64)
+    digest = hashlib.sha256(verifier.encode("ascii")).digest()
+    challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
 
-    saved_files = sorted(ACCOUNTS_DIR.glob("*.json"))
-    has_active_match = False
-    for f in saved_files:
-        try:
-            if get_token_key(f.read_text(encoding="utf-8")) == curr_key:
-                has_active_match = True
-                break
-        except Exception:
-            pass
+    auth_code_received = [None]
+    server_error = [None]
 
-    # If already logged in and current session not registered yet, auto-register by email!
-    if curr_raw and not has_active_match and not ("--new" in sys.argv or "--force" in sys.argv):
-        try:
-            acc_obj = json.loads(curr_raw)
-        except Exception:
-            acc_obj = {"token": curr_raw}
-        token = acc_obj.get("token", {}).get("access_token")
-        email = fetch_account_email(token)
-        if email:
-            acc_obj["email"] = email
+    class OAuthHandler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, format, *args):
+            pass  # Suppress default server logs
 
-        profile_name = name if name else (email if email else f"account_{int(time.time())}")
-        target_file = ACCOUNTS_DIR / f"{profile_name}.json"
-        target_file.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
-        
-        email_txt = f" ({email})" if email and profile_name != email else ""
-        print(f"\033[1;32m[OK] Automatically registered active session as '{profile_name}'{email_txt}!\033[0m")
+        def do_GET(self):
+            parsed = urllib.parse.urlparse(self.path)
+            params = urllib.parse.parse_qs(parsed.query)
+
+            if "code" in params:
+                auth_code_received[0] = params["code"][0]
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                html = """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Antigravity Authentication</title>
+                    <style>
+                        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+                        .card { background: #1e293b; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); text-align: center; max-width: 400px; }
+                        h2 { color: #22c55e; margin-top: 0; }
+                        p { color: #94a3b8; font-size: 14px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="card">
+                        <h2>✔ Authentication Successful!</h2>
+                        <p>You can close this tab and return to your terminal.</p>
+                    </div>
+                    <script>setTimeout(function(){ window.close(); }, 3000);</script>
+                </body>
+                </html>
+                """
+                self.wfile.write(html.encode("utf-8"))
+            elif "error" in params:
+                server_error[0] = params.get("error_description", params["error"])[0]
+                self.send_response(400)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"<html><body><h2>Authentication failed.</h2></body></html>")
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+    # Start server on local ephemeral port
+    server = socketserver.TCPServer(("127.0.0.1", 0), OAuthHandler)
+    port = server.server_address[1]
+    redirect_uri = f"http://127.0.0.1:{port}"
+
+    auth_params = {
+        "client_id": OAUTH_CLIENT_ID,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": " ".join(OAUTH_SCOPES),
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+        "access_type": "offline",
+        "prompt": "select_account"
+    }
+    auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(auth_params)
+
+    print("\033[1;36m[>] Opening Google OAuth in your browser...\033[0m")
+    print(f"\033[90mIf your browser does not open automatically, copy and open this URL:\033[0m\n\033[4;34m{auth_url}\033[0m\n")
+
+    # Try opening browser
+    try:
+        webbrowser.open(auth_url)
+    except Exception:
+        pass
+
+    # Wait for OAuth callback in thread
+    server_thread = threading.Thread(target=server.handle_request)
+    server_thread.daemon = True
+    server_thread.start()
+
+    print("\033[90mWaiting for authentication to complete in browser (Timeout: 120s)...\033[0m")
+    start_time = time.time()
+    while server_thread.is_alive():
+        if time.time() - start_time > 120:
+            print("\033[91m[Error] Authentication timed out after 120 seconds.\033[0m")
+            server.server_close()
+            return
+        time.sleep(0.5)
+
+    server.server_close()
+
+    if server_error[0]:
+        print(f"\033[91m[Error] OAuth error: {server_error[0]}\033[0m")
         return
 
-    # Clear active session to force fresh OAuth in browser
-    cred_delete(CRED_TARGET)
-    print("\033[1;36m[>] Launching Google OAuth login...\033[0m")
-    print("\033[90mOpening browser window / link to authenticate with Google...\033[0m\n")
+    code = auth_code_received[0]
+    if not code:
+        print("\033[91m[Error] Did not receive authorization code.\033[0m")
+        return
+
+    # Exchange code for token
+    token_url = "https://oauth2.googleapis.com/token"
+    token_payload = urllib.parse.urlencode({
+        "client_id": OAUTH_CLIENT_ID,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": redirect_uri,
+        "code_verifier": verifier
+    }).encode("utf-8")
 
     try:
-        subprocess.run(["agy"], check=False)
-    except FileNotFoundError:
-        print("\033[91m[Error] 'agy' executable not found in PATH!\033[0m")
-        sys.exit(1)
+        token_req = urllib.request.Request(token_url, data=token_payload, headers={"Content-Type": "application/x-www-form-urlencoded"})
+        with urllib.request.urlopen(token_req, timeout=10) as resp:
+            token_res = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        print(f"\033[91m[Error] Token exchange failed: {e}\033[0m")
+        return
 
-    new_cred = cred_read(CRED_TARGET)
-    if new_cred:
-        try:
-            acc_obj = json.loads(new_cred)
-        except Exception:
-            acc_obj = {"token": new_cred}
-        token = acc_obj.get("token", {}).get("access_token")
-        email = fetch_account_email(token)
-        if email:
-            acc_obj["email"] = email
+    access_token = token_res.get("access_token")
+    refresh_token = token_res.get("refresh_token")
+    expires_in = token_res.get("expires_in", 3600)
+    expiry_dt = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+    expiry_iso = expiry_dt.isoformat()
 
-        profile_name = name if name else (email if email else f"account_{int(time.time())}")
-        target_file = ACCOUNTS_DIR / f"{profile_name}.json"
-        target_file.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
-        
-        email_txt = f" ({email})" if email and profile_name != email else ""
-        print(f"\n\033[1;32m[OK] Login successful! Saved account as '{profile_name}'{email_txt}.\033[0m")
-    else:
-        print("\n\033[91m[Error] No new login credential detected.\033[0m")
+    # Get Google email
+    email = fetch_account_email(access_token)
+
+    # Format exactly as Antigravity / Gemini expects
+    agy_credential_obj = {
+        "auth_method": "oauth",
+        "token": {
+            "access_token": access_token,
+            "token_type": "Bearer",
+            "refresh_token": refresh_token,
+            "expiry": expiry_iso
+        }
+    }
+    if email:
+        agy_credential_obj["email"] = email
+
+    cred_json_str = json.dumps(agy_credential_obj)
+
+    # Save to Windows Credential Manager
+    cred_write(CRED_TARGET, cred_json_str, CRED_USER)
+
+    # Save profile to accounts directory
+    profile_name = name if name else (email if email else f"account_{int(time.time())}")
+    ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
+    target_file = ACCOUNTS_DIR / f"{profile_name}.json"
+    target_file.write_text(json.dumps(agy_credential_obj, indent=2), encoding="utf-8")
+
+    email_txt = f" ({email})" if email and profile_name != email else ""
+    print(f"\n\033[1;32m[OK] Login successful! Saved account profile as '{profile_name}'{email_txt}.\033[0m")
+
+
+def cmd_login(name=None):
+    """Directly triggers Google OAuth login and automatically saves by Email."""
+    perform_direct_google_oauth(name)
 
 
 def cmd_switch(identifier):
@@ -407,13 +521,13 @@ def print_help():
     print("""\033[1;36magi-auth\033[0m - Multi-account manager for Antigravity CLI (agy)
 
 \033[1mUsage:\033[0m
-  agi-auth login [name]     Đăng nhập OAuth tài khoản Google (tự lưu theo Email)
-  agi-auth list             Xem danh sách tài khoản, Email & Quota (5h/weekly)
+  agi-auth login [name]        Đăng nhập Google OAuth (Mở trình duyệt trực tiếp)
+  agi-auth list                Xem danh sách tài khoản, Email & Quota (5h/weekly)
   agi-auth switch <acc/email>  Chuyển sang tài khoản (bằng Tên hoặc Email)
   agi-auth remove <acc/email>  Xóa tài khoản (bằng Tên hoặc Email)
 
 \033[1mQuick Run:\033[0m
-  agi                       Chạy agy với --dangerously-skip-permissions
+  agi                          Chạy agy với --dangerously-skip-permissions
 """)
 
 
