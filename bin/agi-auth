@@ -200,37 +200,67 @@ def get_cached_quota():
     return None
 
 
-def format_quota(q_data):
-    """Format remaining fraction and reset time into human-readable string."""
+def format_relative_time(mtime, is_active=False):
+    """Format file mtime to relative time string (Now, 1d ago, etc.)."""
+    if is_active:
+        return "Now"
+    now = datetime.now()
+    diff = now - datetime.fromtimestamp(mtime)
+    secs = int(diff.total_seconds())
+    if secs < 120:
+        return "Now"
+    mins = secs // 60
+    if mins < 60:
+        return f"{mins}m ago"
+    hours = mins // 60
+    if hours < 24:
+        return f"{hours}h ago"
+    days = hours // 24
+    return f"{days}d ago"
+
+
+def format_quota_dt(q_data):
+    """Format remaining fraction and reset time into codex-auth style."""
     if not q_data:
         return "100%"
     rem = q_data.get("remaining_fraction")
-    if rem is None:
-        return "100%"
-    pct = int(round(float(rem) * 100))
+    pct = f"{int(round(float(rem) * 100))}%" if rem is not None else "100%"
     res = q_data.get("reset_time")
-    time_str = ""
     if res and res != "null":
         try:
-            time_str = f" (reset {res.split('T')[1][:5]})"
+            dt = datetime.fromisoformat(res.replace("Z", "+00:00"))
+            local_dt = dt.astimezone()
+            time_str = local_dt.strftime("%H:%M on %d %b")
+            return f"{pct} ({time_str})"
         except Exception:
             pass
-    return f"{pct}%{time_str}"
+    return pct
 
 
 def find_account_file(identifier):
-    """Find account profile by alias or by email."""
+    """Find account profile by index, alias, or email."""
     if not identifier:
         return None
     ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
+    saved_files = sorted(ACCOUNTS_DIR.glob("*.json"))
+
+    # Support index (e.g. 1, 01, 2, 02)
+    if str(identifier).strip().isdigit():
+        idx = int(identifier) - 1
+        if 0 <= idx < len(saved_files):
+            return saved_files[idx]
+
     direct = ACCOUNTS_DIR / f"{identifier}.json"
     if direct.exists():
         return direct
     
-    for f in ACCOUNTS_DIR.glob("*.json"):
+    if (ACCOUNTS_DIR / identifier).exists():
+        return ACCOUNTS_DIR / identifier
+
+    for f in saved_files:
         try:
             obj = json.loads(f.read_text(encoding="utf-8"))
-            if obj.get("email", "").lower() == identifier.lower():
+            if obj.get("email", "").lower() == str(identifier).strip().lower():
                 return f
         except Exception:
             pass
@@ -238,70 +268,77 @@ def find_account_file(identifier):
 
 
 def cmd_list():
-    """List all saved accounts with Email & Quotas."""
+    """List all saved accounts formatted exactly like codex-auth list."""
     ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
     saved_files = sorted(ACCOUNTS_DIR.glob("*.json"))
     curr_raw = cred_read()
     curr_key = get_token_key(curr_raw)
     quota_info = get_cached_quota()
 
-    print("\033[1;36m=== Antigravity Accounts ===\033[0m")
+    header = "     ACCOUNT                         PLAN  5H USAGE                WEEKLY USAGE           LAST ACTIVITY"
+    print(header)
+    print("-" * len(header))
+
+    if not saved_files and not curr_raw:
+        print("  -- No accounts saved yet. Run 'agi-auth login' to add an account. --")
+        return
 
     has_active_match = False
-    if saved_files:
-        for f in saved_files:
-            acc_name = f.stem
-            try:
-                content = f.read_text(encoding="utf-8")
-                acc_obj = json.loads(content)
-                saved_key = get_token_key(content)
-                is_active = (curr_key and saved_key == curr_key)
-                if is_active:
-                    has_active_match = True
+    for idx, f in enumerate(saved_files, 1):
+        try:
+            content = f.read_text(encoding="utf-8")
+            acc_obj = json.loads(content)
+            saved_key = get_token_key(content)
+            is_active = (curr_key and saved_key == curr_key)
+            if is_active:
+                has_active_match = True
 
-                email = acc_obj.get("email")
-                if not email:
-                    token = acc_obj.get("token", {}).get("access_token")
-                    email = fetch_account_email(token)
-                    if email:
-                        acc_obj["email"] = email
-                        f.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
+            email = acc_obj.get("email")
+            if not email:
+                token = acc_obj.get("token", {}).get("access_token")
+                email = fetch_account_email(token)
+                if email:
+                    acc_obj["email"] = email
+                    f.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
 
-                # Auto-normalize alias filename to email filename if email is available
-                if email and acc_name != email and not (ACCOUNTS_DIR / f"{email}.json").exists():
-                    try:
-                        f.rename(ACCOUNTS_DIR / f"{email}.json")
-                        acc_name = email
-                    except Exception:
-                        pass
+            # Normalize alias filename to email filename
+            if email and f.stem != email and not (ACCOUNTS_DIR / f"{email}.json").exists():
+                try:
+                    new_f = ACCOUNTS_DIR / f"{email}.json"
+                    f.rename(new_f)
+                    f = new_f
+                except Exception:
+                    pass
 
-                status_tag = "\033[1;32m● active\033[0m" if is_active else "\033[90m○ inactive\033[0m"
-                marker = "\033[1;32m*\033[0m" if is_active else " "
+            displayName = email if email else f.stem
+            plan = acc_obj.get("plan_tier", "Plus" if "plus" in displayName.lower() else "Free")
+            
+            # Quota
+            q_5h = "100%"
+            q_wk = "100%"
+            if is_active and quota_info:
+                plan = quota_info.get("plan_tier") or plan
+                q_obj = quota_info.get("quota") or {}
+                q_5h = format_quota_dt(q_obj.get("gemini-5h"))
+                q_wk = format_quota_dt(q_obj.get("gemini-weekly"))
+            elif "quota" in acc_obj:
+                q_5h = format_quota_dt(acc_obj.get("quota", {}).get("gemini-5h"))
+                q_wk = format_quota_dt(acc_obj.get("quota", {}).get("gemini-weekly"))
 
-                displayName = email if email else acc_name
-                print(f" {marker} \033[1;36m{displayName}\033[0m [{status_tag}]")
+            mtime = f.stat().st_mtime
+            rel_time = format_relative_time(mtime, is_active=is_active)
+            
+            marker = "* " if is_active else "  "
+            idx_str = f"{idx:02d}"
 
-                q_5h = "100%"
-                q_7d = "100%"
-                tier_str = "Standard"
+            # Format row
+            if is_active:
+                print(f"\033[1;32m{marker}{idx_str} {displayName:<31} {plan:<5} {q_5h:<23} {q_wk:<22} {rel_time:<13}\033[0m")
+            else:
+                print(f"{marker}{idx_str} {displayName:<31} {plan:<5} {q_5h:<23} {q_wk:<22} {rel_time:<13}")
 
-                if is_active and quota_info:
-                    tier_str = quota_info.get("plan_tier") or "Standard"
-                    q_obj = quota_info.get("quota") or {}
-                    q_5h = format_quota(q_obj.get("gemini-5h"))
-                    q_7d = format_quota(q_obj.get("gemini-weekly"))
-                elif "quota" in acc_obj:
-                    q_5h = format_quota(acc_obj.get("quota", {}).get("gemini-5h"))
-                    q_7d = format_quota(acc_obj.get("quota", {}).get("gemini-weekly"))
-                    tier_str = acc_obj.get("plan_tier", "Standard")
-
-                print(f"    \033[90m├─ 5h Limit:     \033[0m\033[33m{q_5h}\033[0m")
-                print(f"    \033[90m├─ Weekly Limit: \033[0m\033[33m{q_7d}\033[0m")
-                print(f"    \033[90m└─ Plan / Tier:  \033[0m\033[37m{tier_str}\033[0m")
-                print()
-
-            except Exception as e:
-                print(f"    {acc_name} (corrupt: {e})")
+        except Exception as e:
+            print(f"  {idx:02d} {f.stem:<31} Error: {e}")
 
     if curr_raw and not has_active_match:
         curr_token = None
@@ -309,12 +346,8 @@ def cmd_list():
             curr_token = json.loads(curr_raw).get("token", {}).get("access_token")
         except Exception:
             pass
-        curr_email = fetch_account_email(curr_token)
-        email_tag = f" ({curr_email})" if curr_email else ""
-        print(f"  \033[1;33m* current session{email_tag} [● active - unsaved]\033[0m")
-        print("\033[90m  -> Run 'agi-auth login' to automatically register this session.\033[0m\n")
-    elif not saved_files and not curr_raw:
-        print("\033[93m[!] No saved accounts. Run 'agi-auth login' to login.\033[0m\n")
+        curr_email = fetch_account_email(curr_token) or "current session"
+        print(f"\033[1;33m* ?? {curr_email:<31} [unsaved] Run 'agi-auth login' to save\033[0m")
 
 
 def perform_direct_google_oauth(name=None):
@@ -473,9 +506,9 @@ def cmd_login(name=None):
 
 
 def cmd_switch(identifier):
-    """Switch to a saved account (by alias or email)."""
+    """Switch to a saved account (by index, alias, or email)."""
     if not identifier:
-        print("\033[91m[Error] Missing account name or email. Usage: agi-auth switch <account_or_email>\033[0m")
+        print("\033[91m[Error] Missing account name or email. Usage: agi-auth switch <number_or_email>\033[0m")
         sys.exit(1)
 
     target_file = find_account_file(identifier)
@@ -494,9 +527,9 @@ def cmd_switch(identifier):
 
 
 def cmd_remove(identifier):
-    """Remove a saved account (by alias or email)."""
+    """Remove a saved account (by index, alias, or email)."""
     if not identifier:
-        print("\033[91m[Error] Missing account name or email. Usage: agi-auth remove <account_or_email>\033[0m")
+        print("\033[91m[Error] Missing account name or email. Usage: agi-auth remove <number_or_email>\033[0m")
         sys.exit(1)
 
     target_file = find_account_file(identifier)
@@ -513,8 +546,8 @@ def print_help():
 \033[1mUsage:\033[0m
   agi-auth login [name]        Đăng nhập Google OAuth (Mở trình duyệt trực tiếp)
   agi-auth list                Xem danh sách tài khoản, Email & Quota (5h/weekly)
-  agi-auth switch <email/acc>  Chuyển sang tài khoản (bằng Email hoặc Tên)
-  agi-auth remove <email/acc>  Xóa tài khoản (bằng Email hoặc Tên)
+  agi-auth switch <num/email>  Chuyển sang tài khoản (bằng Số thứ tự hoặc Email)
+  agi-auth remove <num/email>  Xóa tài khoản (bằng Số thứ tự hoặc Email)
 
 \033[1mQuick Run:\033[0m
   agi                          Chạy agy với --dangerously-skip-permissions
