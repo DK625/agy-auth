@@ -6,24 +6,25 @@ $ErrorActionPreference = "Stop"
 
 $InstallDir = "$env:USERPROFILE\.agi-auth"
 $BinDir = "$InstallDir\bin"
-$RawUrl = "https://raw.githubusercontent.com/DK625/agy-auth/main"
+$Timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+$RawUrl = "https://raw.githubusercontent.com/DK625/agy-auth/main/bin/agi-auth?t=$Timestamp"
 
-Write-Host "==> Installing agi-auth & agi shortcut for Windows..." -ForegroundColor Cyan
+Write-Host "==> Installing / Updating agi-auth & agi shortcut for Windows..." -ForegroundColor Cyan
 
 # Create directories
 New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
 New-Item -ItemType Directory -Path "$env:USERPROFILE\.gemini\accounts" -Force | Out-Null
 New-Item -ItemType Directory -Path "$env:USERPROFILE\.local\bin" -Force | Out-Null
 
-# Download script
-Invoke-WebRequest -Uri "$RawUrl/bin/agi-auth" -OutFile "$BinDir\agi-auth.py"
+# Download latest script (bypassing CDN cache)
+Invoke-WebRequest -Uri $RawUrl -OutFile "$BinDir\agi-auth.py" -UseBasicParsing
 
 # Create .cmd wrapper
 $cmdContent = "@echo off`npython `"$BinDir\agi-auth.py`" %*"
 Set-Content -Path "$BinDir\agi-auth.cmd" -Value $cmdContent -Encoding ASCII
 Set-Content -Path "$env:USERPROFILE\.local\bin\agi-auth.cmd" -Value $cmdContent -Encoding ASCII
 
-# Append to PowerShell Profile
+# Append to PowerShell Profile if not present
 $ProfileSnippet = @"
 
 # --- agi & agi-auth (Antigravity CLI Manager) ---
@@ -48,13 +49,13 @@ if ($currentProfile -notmatch "agi-auth") {
 }
 
 Write-Host ""
-Write-Host "==> Installation successful!" -ForegroundColor Green
+Write-Host "==> Installation / Update successful!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Usage:" -ForegroundColor White
-Write-Host "  agi-auth login <name>   - Login to a new account & save as <name>" -ForegroundColor Cyan
-Write-Host "  agi-auth list           - List all saved accounts" -ForegroundColor Cyan
-Write-Host "  agi-auth switch <name>  - Switch to saved account" -ForegroundColor Cyan
-Write-Host "  agi-auth remove <name>  - Remove a saved account" -ForegroundColor Cyan
+Write-Host "  agi-auth login          - Direct Google OAuth login & auto-save by Email" -ForegroundColor Cyan
+Write-Host "  agi-auth list           - List all saved accounts, Email & Quota (5h/weekly)" -ForegroundColor Cyan
+Write-Host "  agi-auth switch <email> - Switch to saved account (by Email or Alias)" -ForegroundColor Cyan
+Write-Host "  agi-auth remove <email> - Remove a saved account" -ForegroundColor Cyan
 Write-Host "  agi                     - Run agy with --dangerously-skip-permissions" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Restart your terminal or run: . `$PROFILE" -ForegroundColor Gray
+Write-Host "Ready to use! Try running: agi-auth list" -ForegroundColor Gray
