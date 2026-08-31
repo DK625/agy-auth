@@ -15,6 +15,7 @@ import urllib.parse
 import webbrowser
 import secrets
 import base64
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -330,9 +331,11 @@ def format_usage_dt(q_data, is_5h=False):
     return f"{remain_pct}%"
 
 
-def launch_agi(extra_args=None):
+def launch_agi(account_email=None, extra_args=None):
     """Launch Antigravity CLI directly (agy --dangerously-skip-permissions)."""
     print("\n\x1b[1;36m[>] Launching Antigravity CLI (agi)...\x1b[0m\n")
+    if account_email:
+        os.environ["AGI_ACTIVE_ACCOUNT"] = account_email
     cmd = ["agy", "--dangerously-skip-permissions"]
     if extra_args:
         cmd.extend(extra_args)
@@ -373,62 +376,47 @@ def sync_active_session():
                 if curr_key and f_key == curr_key:
                     matched_file = f
                     break
-                if curr_obj.get("email") and f_obj.get("email") and curr_obj["email"].lower() == f_obj["email"].lower():
-                    matched_file = f
-                    break
             except Exception:
                 pass
-
-        access_token = ensure_valid_token(curr_obj, matched_file)
-        email = curr_obj.get("email")
-        if not email and access_token:
-            email = fetch_account_email(access_token)
-            if email:
-                curr_obj["email"] = email
-                try:
-                    cred_write(CRED_TARGET, json.dumps(curr_obj), CRED_USER)
-                except Exception:
-                    pass
 
         if matched_file:
-            try:
-                f_content = matched_file.read_text(encoding="utf-8")
-                f_obj = json.loads(f_content)
-                updated = False
-                if email and f_obj.get("email") != email:
-                    f_obj["email"] = email
-                    updated = True
-                if tok_data and f_obj.get("token", {}).get("access_token") != tok_data.get("access_token"):
-                    f_obj["token"] = tok_data
-                    updated = True
-                if updated:
-                    matched_file.write_text(json.dumps(f_obj, indent=2), encoding="utf-8")
-            except Exception:
-                pass
             return matched_file
-        else:
-            file_name = email if email else f"account_{int(time.time())}"
-            target_file = ACCOUNTS_DIR / f"{file_name}.json"
-            target_file.write_text(json.dumps(curr_obj, indent=2), encoding="utf-8")
-            return target_file
+
+        email = curr_obj.get("email")
+        if not email:
+            email = fetch_account_email(tok_data.get("access_token"))
+
+        if not email:
+            return None
+
+        clean_name = re.sub(r'[/\\:*?"<>|]', '_', email)
+        target_file = ACCOUNTS_DIR / f"{clean_name}.json"
+        
+        curr_obj["email"] = email
+        if "auth_method" not in curr_obj:
+            curr_obj["auth_method"] = "consumer"
+            
+        target_file.write_text(json.dumps(curr_obj, indent=2), encoding="utf-8")
+        return target_file
     except Exception:
         return None
 
 
 def find_account_file(identifier):
-    """Find account profile by index, alias, or email."""
-    if not identifier:
-        return None
-    sync_active_session()
+    """Find account JSON file by index number, alias name, or email string."""
     ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
     saved_files = sorted(ACCOUNTS_DIR.glob("*.json"))
+    if not saved_files:
+        return None
 
-    if str(identifier).strip().isdigit():
+    if str(identifier).isdigit():
         idx = int(identifier) - 1
         if 0 <= idx < len(saved_files):
             return saved_files[idx]
+        return None
 
-    direct = ACCOUNTS_DIR / f"{identifier}.json"
+    clean_id = re.sub(r'[/\\:*?"<>|]', '_', str(identifier).strip())
+    direct = ACCOUNTS_DIR / f"{clean_id}.json"
     if direct.exists():
         return direct
     
@@ -456,7 +444,7 @@ def extract_quota_strings(q_obj):
 
 
 def cmd_list():
-    """List all saved accounts cleanly and instantly."""
+    """List all saved accounts with their isolated 5H and Weekly quota."""
     sync_active_session()
     ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
     saved_files = sorted(ACCOUNTS_DIR.glob("*.json"))
@@ -464,9 +452,11 @@ def cmd_list():
     curr_key = get_token_key(curr_raw)
 
     h_acc = "ACCOUNT"
-    h_type = "AUTH TYPE"
+    h_plan = "PLAN"
+    h_5h = "5H REMAIN"
+    h_wk = "WEEKLY REMAIN"
     h_act = "LAST ACTIVITY"
-    header = f"     {h_acc:<32} {h_type:<20} {h_act:<15}"
+    header = f"     {h_acc:<28} {h_plan:<14} {h_5h:<15} {h_wk:<20} {h_act:<13}"
     print(header)
     print("-" * len(header))
 
@@ -498,18 +488,25 @@ def cmd_list():
                 except Exception:
                     pass
 
-            auth_type = acc_obj.get("auth_method", "consumer").capitalize() + " (OAuth)"
+            plan = acc_obj.get("plan_tier", "Standard")
+            q_5h = "-"
+            q_wk = "-"
+
+            if "quota" in acc_obj:
+                saved_q = acc_obj.get("quota") or {}
+                q_5h, q_wk = extract_quota_strings(saved_q)
+
             mtime = f.stat().st_mtime
             rel_time = format_relative_time(mtime, is_active=is_active)
             
             marker = "* " if is_active else "  "
             idx_str = f"{idx:02d}"
-            disp_col = email if len(email) <= 32 else (email[:29] + "...")
+            disp_col = email if len(email) <= 28 else (email[:25] + "...")
 
             if is_active:
-                print(f"\x1b[1;32m{marker}{idx_str} {disp_col:<32} {auth_type:<20} {rel_time:<15}\x1b[0m")
+                print(f"\x1b[1;32m{marker}{idx_str} {disp_col:<28} {plan:<14} {q_5h:<15} {q_wk:<20} {rel_time:<13}\x1b[0m")
             else:
-                print(f"{marker}{idx_str} {disp_col:<32} {auth_type:<20} {rel_time:<15}")
+                print(f"{marker}{idx_str} {disp_col:<28} {plan:<14} {q_5h:<15} {q_wk:<20} {rel_time:<13}")
         except Exception:
             pass
 
@@ -520,7 +517,7 @@ def cmd_list():
         except Exception:
             pass
         curr_email = fetch_account_email(curr_token) or "current session"
-        print(f"\x1b[1;33m* ?? {curr_email:<32} [unsaved] Run 'agi-auth login' to save\x1b[0m")
+        print(f"\x1b[1;33m* ?? {curr_email:<28} [unsaved] Run 'agi-auth login' to save\x1b[0m")
 
 
 OAUTH_PRIMARY_CLIENT = CLIENT_CONFIGS[1]
@@ -640,14 +637,15 @@ def perform_direct_google_oauth(name=None):
     target_file.write_text(json.dumps(agy_credential_obj, indent=2), encoding="utf-8")
 
     print(f"\n\x1b[1;32m[OK] Login successful! Saved account as '{profile_name}'.\x1b[0m")
-    return True
+    return email if email else True
 
 
 def cmd_login(name=None, launch=True):
     """Directly triggers Google OAuth login, saves account, and launches agi."""
-    success = perform_direct_google_oauth(name)
-    if success and launch:
-        launch_agi()
+    res = perform_direct_google_oauth(name)
+    if res and launch:
+        email = res if isinstance(res, str) else None
+        launch_agi(account_email=email)
 
 
 def cmd_switch(identifier, launch=True):
@@ -679,7 +677,7 @@ def cmd_switch(identifier, launch=True):
     display_txt = email if email else target_file.stem
     print(f"\x1b[1;32m[OK] Switched to account '{display_txt}' successfully!\x1b[0m")
     if launch:
-        launch_agi()
+        launch_agi(account_email=email)
 
 
 def cmd_remove(identifier):
