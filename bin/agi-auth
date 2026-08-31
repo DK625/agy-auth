@@ -12,9 +12,6 @@ import hashlib
 import time
 import urllib.request
 import urllib.parse
-import http.server
-import socketserver
-import threading
 import webbrowser
 import secrets
 import base64
@@ -38,7 +35,7 @@ CRED_USER = "antigravity"
 def _k(arr):
     return bytes([b ^ 0x5A for b in arr]).decode("ascii")
 
-# Dual Client Credentials used by Antigravity CLI
+# Antigravity CLI Official Client Credentials
 CLIENT_CONFIGS = [
     {
         "id": _k([98, 98, 110, 105, 111, 110, 99, 107, 99, 106, 111, 104, 119, 105, 108, 46, 40, 57, 107, 48, 48, 56, 105, 46, 61, 47, 51, 59, 57, 105, 104, 53, 44, 108, 57, 53, 62, 104, 108, 98, 57, 111, 56, 54, 50, 116, 59, 42, 42, 41, 116, 61, 53, 53, 61, 54, 63, 47, 41, 63, 40, 57, 53, 52, 46, 63, 52, 46, 116, 57, 53, 55]),
@@ -48,19 +45,6 @@ CLIENT_CONFIGS = [
         "id": _k([107, 106, 109, 107, 106, 106, 108, 106, 108, 106, 111, 99, 107, 119, 46, 55, 50, 41, 41, 51, 52, 104, 50, 104, 107, 54, 57, 40, 63, 104, 105, 111, 44, 46, 53, 54, 53, 48, 50, 110, 61, 110, 106, 105, 63, 42, 116, 59, 42, 42, 41, 116, 61, 53, 53, 61, 54, 63, 47, 41, 63, 40, 57, 53, 52, 46, 63, 52, 46, 116, 57, 53, 55]),
         "secret": _k([29, 21, 25, 9, 10, 2, 119, 17, 111, 98, 28, 13, 8, 110, 98, 108, 22, 62, 22, 16, 107, 55, 22, 24, 98, 41, 2, 25, 110, 32, 108, 43, 30, 27, 60])
     }
-]
-
-OAUTH_PRIMARY_CLIENT = CLIENT_CONFIGS[0]
-
-OAUTH_SCOPES = [
-    "openid",
-    "email",
-    "profile",
-    "https://www.googleapis.com/auth/cloud-platform",
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
-    "https://www.googleapis.com/auth/cclog",
-    "https://www.googleapis.com/auth/experimentsandconfigs"
 ]
 
 SUCCESS_HTML = base64.b64decode("PCFET0NUWVBFIGh0bWw+CjxodG1sIGxhbmc9ImVuIj4KPGhlYWQ+CiAgICA8bWV0YSBjaGFyc2V0PSJVVEYtOCI+CiAgICA8bWV0YSBuYW1lPSJ2aWV3cG9ydCIgY29udGVudD0id2lkdGg9ZGV2aWNlLXdpZHRoLCBpbml0aWFsLXNjYWxlPTEuMCI+CiAgICA8dGl0bGU+QXV0aGVudGljYXRpb24gU3VjY2Vzc2Z1bDwvdGl0bGU+CiAgICA8c3R5bGU+CiAgICAgICAgKiB7IGJveC1zaXppbmc6IGJvcmRlci1ib3g7IG1hcmdpbjogMDsgcGFkZGluZzogMDsgfQogICAgICAgIGJvZHkgewogICAgICAgICAgICBmb250LWZhbWlseTogLWFwcGxlLXN5c3RlbSwgQmxpbmtNYWNTeXN0ZW1Gb250LCAiU2Vnb2UgVUkiLCBSb2JvdG8sIEhlbHZldGljYSwgQXJpYWwsIHNhbnMtc2VyaWY7CiAgICAgICAgICAgIGJhY2tncm91bmQ6IGxpbmVhci1ncmFkaWVudCgxODBkZWcsICNlZWY3ZjkgMCUsICNlMGYyZjEgNDAlLCAjZThmNWU5IDEwMCUpOwogICAgICAgICAgICBtaW4taGVpZ2h0OiAxMDB2aDsKICAgICAgICAgICAgZGlzcGxheTogZmxleDsKICAgICAgICAgICAgZmxleC1kaXJlY3Rpb246IGNvbHVtbjsKICAgICAgICAgICAgYWxpZ24taXRlbXM6IGNlbnRlcjsKICAgICAgICAgICAganVzdGlmeS1jb250ZW50OiBjZW50ZXI7CiAgICAgICAgICAgIHBvc2l0aW9uOiByZWxhdGl2ZTsKICAgICAgICAgICAgb3ZlcmZsb3c6IGhpZGRlbjsKICAgICAgICB9CgogICAgICAgIC8qIEFtYmllbnQgY2xvdWRzICYgYmFja2dyb3VuZCAqLwogICAgICAgIC5iZy1oaWxscyB7CiAgICAgICAgICAgIHBvc2l0aW9uOiBhYnNvbHV0ZTsKICAgICAgICAgICAgYm90dG9tOiAwOwogICAgICAgICAgICBsZWZ0OiAwOwogICAgICAgICAgICB3aWR0aDogMTAwJTsKICAgICAgICAgICAgaGVpZ2h0OiA0MCU7CiAgICAgICAgICAgIHBvaW50ZXItZXZlbnRzOiBub25lOwogICAgICAgICAgICB6LWluZGV4OiAwOwogICAgICAgIH0KCiAgICAgICAgLyogRmxvYXRpbmcgY29uZmV0dGkgcGFydGljbGVzICovCiAgICAgICAgLnBhcnRpY2xlIHsKICAgICAgICAgICAgcG9zaXRpb246IGFic29sdXRlOwogICAgICAgICAgICBwb2ludGVyLWV2ZW50czogbm9uZTsKICAgICAgICAgICAgb3BhY2l0eTogMC42NTsKICAgICAgICAgICAgei1pbmRleDogMDsKICAgICAgICAgICAgYW5pbWF0aW9uOiBmbG9hdFNsb3cgNnMgZWFzZS1pbi1vdXQgaW5maW5pdGUgYWx0ZXJuYXRlOwogICAgICAgIH0KICAgICAgICBAa2V5ZnJhbWVzIGZsb2F0U2xvdyB7CiAgICAgICAgICAgIDAlIHsgdHJhbnNmb3JtOiB0cmFuc2xhdGVZKDBweCkgcm90YXRlKDBkZWcpOyB9CiAgICAgICAgICAgIDEwMCUgeyB0cmFuc2Zvcm06IHRyYW5zbGF0ZVkoLTE1cHgpIHJvdGF0ZSgxNWRlZyk7IH0KICAgICAgICB9CgogICAgICAgIC5jYXJkIHsKICAgICAgICAgICAgYmFja2dyb3VuZDogI2ZmZmZmZjsKICAgICAgICAgICAgcGFkZGluZzogNDhweCA0OHB4IDM2cHg7CiAgICAgICAgICAgIGJvcmRlci1yYWRpdXM6IDI4cHg7CiAgICAgICAgICAgIGJveC1zaGFkb3c6IDAgMjBweCA1MHB4IHJnYmEoMTYsIDE4NSwgMTI5LCAwLjA4KSwgMCA0cHggMjBweCByZ2JhKDAsIDAsIDAsIDAuMDQpOwogICAgICAgICAgICB0ZXh0LWFsaWduOiBjZW50ZXI7CiAgICAgICAgICAgIG1heC13aWR0aDogNDgwcHg7CiAgICAgICAgICAgIHdpZHRoOiA5MCU7CiAgICAgICAgICAgIHBvc2l0aW9uOiByZWxhdGl2ZTsKICAgICAgICAgICAgei1pbmRleDogMjsKICAgICAgICAgICAgYW5pbWF0aW9uOiBwb3BJbiAwLjVzIGN1YmljLWJlemllcigwLjE2LCAxLCAwLjMsIDEpOwogICAgICAgIH0KCiAgICAgICAgQGtleWZyYW1lcyBwb3BJbiB7CiAgICAgICAgICAgIDAlIHsgb3BhY2l0eTogMDsgdHJhbnNmb3JtOiBzY2FsZSgwLjkpIHRyYW5zbGF0ZVkoMjRweCk7IH0KICAgICAgICAgICAgMTAwJSB7IG9wYWNpdHk6IDE7IHRyYW5zZm9ybTogc2NhbGUoMSkgdHJhbnNsYXRlWSgwKTsgfQogICAgICAgIH0KCiAgICAgICAgLmljb24td3JhcCB7CiAgICAgICAgICAgIHBvc2l0aW9uOiByZWxhdGl2ZTsKICAgICAgICAgICAgZGlzcGxheTogaW5saW5lLWZsZXg7CiAgICAgICAgICAgIGFsaWduLWl0ZW1zOiBjZW50ZXI7CiAgICAgICAgICAgIGp1c3RpZnktY29udGVudDogY2VudGVyOwogICAgICAgICAgICB3aWR0aDogOTJweDsKICAgICAgICAgICAgaGVpZ2h0OiA5MnB4OwogICAgICAgICAgICBtYXJnaW4tYm90dG9tOiAyNHB4OwogICAgICAgIH0KCiAgICAgICAgLmljb24tY2lyY2xlIHsKICAgICAgICAgICAgd2lkdGg6IDY4cHg7CiAgICAgICAgICAgIGhlaWdodDogNjhweDsKICAgICAgICAgICAgYmFja2dyb3VuZDogIzIyYzU1ZTsKICAgICAgICAgICAgYm9yZGVyLXJhZGl1czogNTAlOwogICAgICAgICAgICBkaXNwbGF5OiBmbGV4OwogICAgICAgICAgICBhbGlnbi1pdGVtczogY2VudGVyOwogICAgICAgICAgICBqdXN0aWZ5LWNvbnRlbnQ6IGNlbnRlcjsKICAgICAgICAgICAgY29sb3I6ICNmZmZmZmY7CiAgICAgICAgICAgIGJveC1zaGFkb3c6IDAgMTBweCAyMHB4IHJnYmEoMzQsIDE5NywgOTQsIDAuMzUpOwogICAgICAgIH0KCiAgICAgICAgLnRpY2sgewogICAgICAgICAgICBwb3NpdGlvbjogYWJzb2x1dGU7CiAgICAgICAgICAgIGJhY2tncm91bmQ6ICM4NmVmYWM7CiAgICAgICAgICAgIGJvcmRlci1yYWRpdXM6IDRweDsKICAgICAgICB9CiAgICAgICAgLnRpY2stMSB7IHdpZHRoOiA0cHg7IGhlaWdodDogMTJweDsgdG9wOiAycHg7IGxlZnQ6IDI0cHg7IHRyYW5zZm9ybTogcm90YXRlKC0zMGRlZyk7IH0KICAgICAgICAudGljay0yIHsgd2lkdGg6IDRweDsgaGVpZ2h0OiAxMnB4OyB0b3A6IDJweDsgcmlnaHQ6IDI0cHg7IHRyYW5zZm9ybTogcm90YXRlKDMwZGVnKTsgfQogICAgICAgIC50aWNrLTMgeyB3aWR0aDogMTJweDsgaGVpZ2h0OiA0cHg7IHRvcDogMzhweDsgbGVmdDogMHB4OyB0cmFuc2Zvcm06IHJvdGF0ZSgtMjBkZWcpOyB9CiAgICAgICAgLnRpY2stNCB7IHdpZHRoOiAxMnB4OyBoZWlnaHQ6IDRweDsgdG9wOiAzOHB4OyByaWdodDogMHB4OyB0cmFuc2Zvcm06IHJvdGF0ZSgyMGRlZyk7IH0KCiAgICAgICAgaDEgewogICAgICAgICAgICBmb250LXNpemU6IDI4cHg7CiAgICAgICAgICAgIGZvbnQtd2VpZ2h0OiA4MDA7CiAgICAgICAgICAgIGNvbG9yOiAjMGYxNzJhOwogICAgICAgICAgICBtYXJnaW4tYm90dG9tOiAxMnB4OwogICAgICAgICAgICBsZXR0ZXItc3BhY2luZzogLTAuNXB4OwogICAgICAgIH0KCiAgICAgICAgcCB7CiAgICAgICAgICAgIGZvbnQtc2l6ZTogMTVweDsKICAgICAgICAgICAgY29sb3I6ICM2NDc0OGI7CiAgICAgICAgICAgIGxpbmUtaGVpZ2h0OiAxLjU7CiAgICAgICAgICAgIG1hcmdpbi1ib3R0b206IDI4cHg7CiAgICAgICAgfQoKICAgICAgICAuZGl2aWRlciB7CiAgICAgICAgICAgIGhlaWdodDogMXB4OwogICAgICAgICAgICBiYWNrZ3JvdW5kOiAjZjFmNWY5OwogICAgICAgICAgICBtYXJnaW4tYm90dG9tOiAyNHB4OwogICAgICAgIH0KCiAgICAgICAgLmJ0biB7CiAgICAgICAgICAgIGRpc3BsYXk6IGlubGluZS1mbGV4OwogICAgICAgICAgICBhbGlnbi1pdGVtczogY2VudGVyOwogICAgICAgICAgICBqdXN0aWZ5LWNvbnRlbnQ6IGNlbnRlcjsKICAgICAgICAgICAgZ2FwOiA4cHg7CiAgICAgICAgICAgIHBhZGRpbmc6IDEycHggMjhweDsKICAgICAgICAgICAgZm9udC1zaXplOiAxNXB4OwogICAgICAgICAgICBmb250LXdlaWdodDogNjAwOwogICAgICAgICAgICBjb2xvcjogIzY0NzQ4YjsKICAgICAgICAgICAgYmFja2dyb3VuZDogI2ZmZmZmZjsKICAgICAgICAgICAgYm9yZGVyOiAxLjVweCBzb2xpZCAjZTJlOGYwOwogICAgICAgICAgICBib3JkZXItcmFkaXVzOiAxMnB4OwogICAgICAgICAgICBjdXJzb3I6IHBvaW50ZXI7CiAgICAgICAgICAgIHRyYW5zaXRpb246IGFsbCAwLjJzIGVhc2U7CiAgICAgICAgICAgIHRleHQtZGVjb3JhdGlvbjogbm9uZTsKICAgICAgICAgICAgYm94LXNoYWRvdzogMCAycHggNHB4IHJnYmEoMCwwLDAsMC4wMik7CiAgICAgICAgfQoKICAgICAgICAuYnRuOmhvdmVyIHsKICAgICAgICAgICAgYmFja2dyb3VuZDogI2Y4ZmFmYzsKICAgICAgICAgICAgYm9yZGVyLWNvbG9yOiAjY2JkNWUxOwogICAgICAgICAgICBjb2xvcjogIzMzNDE1NTsKICAgICAgICAgICAgdHJhbnNmb3JtOiB0cmFuc2xhdGVZKC0xcHgpOwogICAgICAgICAgICBib3gtc2hhZG93OiAwIDRweCA4cHggcmdiYSgwLDAsMCwwLjA1KTsKICAgICAgICB9CgogICAgICAgIC5mb290ZXItbm90ZSB7CiAgICAgICAgICAgIGRpc3BsYXk6IGZsZXg7CiAgICAgICAgICAgIGFsaWduLWl0ZW1zOiBjZW50ZXI7CiAgICAgICAgICAgIGp1c3RpZnktY29udGVudDogY2VudGVyOwogICAgICAgICAgICBnYXA6IDZweDsKICAgICAgICAgICAgbWFyZ2luLXRvcDogMjRweDsKICAgICAgICAgICAgZm9udC1zaXplOiAxM3B4OwogICAgICAgICAgICBjb2xvcjogIzY0NzQ4YjsKICAgICAgICAgICAgei1pbmRleDogMjsKICAgICAgICB9CgogICAgICAgIC5mb290ZXItbm90ZSBzdmcgewogICAgICAgICAgICB3aWR0aDogMTVweDsKICAgICAgICAgICAgaGVpZ2h0OiAxNXB4OwogICAgICAgICAgICBmaWxsOiBub25lOwogICAgICAgICAgICBzdHJva2U6IGN1cnJlbnRDb2xvcjsKICAgICAgICAgICAgc3Ryb2tlLXdpZHRoOiAyOwogICAgICAgIH0KCiAgICAgICAgLyogU1ZHIEZvbGlhZ2UgU3R5bGluZyAqLwogICAgICAgIC5mb2xpYWdlLWxlZnQgewogICAgICAgICAgICBwb3NpdGlvbjogYWJzb2x1dGU7CiAgICAgICAgICAgIGJvdHRvbTogMDsKICAgICAgICAgICAgbGVmdDogMDsKICAgICAgICAgICAgaGVpZ2h0OiAzODBweDsKICAgICAgICAgICAgcG9pbnRlci1ldmVudHM6IG5vbmU7CiAgICAgICAgICAgIHotaW5kZXg6IDE7CiAgICAgICAgfQoKICAgICAgICAuZm9saWFnZS1yaWdodCB7CiAgICAgICAgICAgIHBvc2l0aW9uOiBhYnNvbHV0ZTsKICAgICAgICAgICAgYm90dG9tOiAwOwogICAgICAgICAgICByaWdodDogMDsKICAgICAgICAgICAgaGVpZ2h0OiAzODBweDsKICAgICAgICAgICAgcG9pbnRlci1ldmVudHM6IG5vbmU7CiAgICAgICAgICAgIHotaW5kZXg6IDE7CiAgICAgICAgfQogICAgPC9zdHlsZT4KPC9oZWFkPgo8Ym9keT4KICAgIDwhLS0gRmxvYXRpbmcgcGFzdGVsIHNoYXBlcyAtLT4KICAgIDxzdmcgY2xhc3M9InBhcnRpY2xlIiBzdHlsZT0idG9wOiAyMCU7IGxlZnQ6IDIyJTsgd2lkdGg6IDE0cHg7IGhlaWdodDogMTRweDsiIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBvbHlnb24gcG9pbnRzPSIxMiAyIDIyIDIyIDIgMjIiIGZpbGw9IiNmYmJmMjQiLz48L3N2Zz4KICAgIDxzdmcgY2xhc3M9InBhcnRpY2xlIiBzdHlsZT0idG9wOiAzNSU7IGxlZnQ6IDE4JTsgd2lkdGg6IDE2cHg7IGhlaWdodDogMTZweDsiIHZpZXdCb3g9IjAgMCAyNCAyNCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiIHN0cm9rZT0iIzM4YmRmOCIgc3Ryb2tlLXdpZHRoPSI0IiBmaWxsPSJub25lIi8+PC9zdmc+CiAgICA8c3ZnIGNsYXNzPSJwYXJ0aWNsZSIgc3R5bGU9InRvcDogNTUlOyBsZWZ0OiAyNCU7IHdpZHRoOiAxNnB4OyBoZWlnaHQ6IDE2cHg7IiB2aWV3Qm94PSIwIDAgMjQgMjQiPjxyZWN0IHg9IjMiIHk9IjMiIHdpZHRoPSIxOCIgaGVpZ2h0PSIxOCIgcng9IjMiIGZpbGw9IiNjMDg0ZmMiIHRyYW5zZm9ybT0icm90YXRlKDQ1IDEyIDEyKSIvPjwvc3ZnPgogICAgCiAgICA8c3ZnIGNsYXNzPSJwYXJ0aWNsZSIgc3R5bGU9InRvcDogMTglOyByaWdodDogMjIlOyB3aWR0aDogMTRweDsgaGVpZ2h0OiAxNHB4OyIgdmlld0JveD0iMCAwIDI0IDI0Ij48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiBmaWxsPSIjMzRkMzk5Ii8+PC9zdmc+CiAgICA8c3ZnIGNsYXNzPSJwYXJ0aWNsZSIgc3R5bGU9InRvcDogMjglOyByaWdodDogMjYlOyB3aWR0aDogMjBweDsgaGVpZ2h0OiAyMHB4OyIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBkPSJNMiAxMiBRIDYgNiwgMTIgMTIgVCAyMiAxMiIgc3Ryb2tlPSIjNjBhNWZhIiBzdHJva2Utd2lkdGg9IjQiIGZpbGw9Im5vbmUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPjwvc3ZnPgogICAgPHN2ZyBjbGFzcz0icGFydGljbGUiIHN0eWxlPSJ0b3A6IDQ1JTsgcmlnaHQ6IDIwJTsgd2lkdGg6IDE0cHg7IGhlaWdodDogMTRweDsiIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBvbHlnb24gcG9pbnRzPSIxMiAyIDIyIDEyIDEyIDIyIDIgMTIiIGZpbGw9IiM2MGE1ZmEiLz48L3N2Zz4KICAgIDxzdmcgY2xhc3M9InBhcnRpY2xlIiBzdHlsZT0idG9wOiA1OCU7IHJpZ2h0OiAyNSU7IHdpZHRoOiAxNHB4OyBoZWlnaHQ6IDE0cHg7IiB2aWV3Qm94PSIwIDAgMjQgMjQiPjxwb2x5Z29uIHBvaW50cz0iMTIgMiAyMiAyMiAyIDIyIiBmaWxsPSIjZmNkMzRkIi8+PC9zdmc+CgogICAgPCEtLSBCb3R0b20gSGlsbHMgLS0+CiAgICA8c3ZnIGNsYXNzPSJiZy1oaWxscyIgdmlld0JveD0iMCAwIDE0NDAgMzIwIiBwcmVzZXJ2ZUFzcGVjdFJhdGlvPSJub25lIj4KICAgICAgICA8cGF0aCBmaWxsPSIjZTZmNGVhIiBmaWxsLW9wYWNpdHk9IjAuOCIgZD0iTTAsMTkyTDQ4LDE5Ny4zQzk2LDIwMywxOTIsMjEzLDI4OCwxOTJDMzg0LDE3MSw0ODAsMTE3LDU3NiwxMjhDNjcyLDEzOSw3NjgsMjEzLDg2NCwyMjRDOTYwLDIzNSwxMDU2LDE4MSwxMTUyLDE1NC43QzEyNDgsMTI4LDEzNDQsMTI4LDEzOTIsMTI4TDE0NDAsMTI4TDE0NDAsMzIwTDEzOTIsMzIwQzEzNDQsMzIwLDEyNDgsMzIwLDExNTIsMzIwQzEwNTYsMzIwLDk2MCwzMjAsODY0LDMyMEM3NjgsMzIwLDY3MiwzMjAsNTc2LDMyMEM0ODAsMzIwLDM4NCwzMjAsMjg4LDMyMEMxOTIsMzIwLDk2LDMyMCw0OCwzMjBMMCwzMjBaIj48L3BhdGg+CiAgICAgICAgPHBhdGggZmlsbD0iI2M4ZTZjOSIgZmlsbC1vcGFjaXR5PSIwLjUiIGQ9Ik0wLDI1Nkw2MCwyNDUuM0MxMjAsMjM1LDI0MCwyMTMsMzYwLDIxOC43QzQ4MCwyMjQsNjAwLDI1Niw3MjAsMjUwLjdDODQwLDI0NSw5NjAsMjAzLDEwODAsMTg2LjdDMTIwMCwxNzEsMTMyMCwxODEsMTM4MCwxODYuN0wxNDQwLDE5MkwxNDQwLDMyMEwxMzgwLDMyMEMxMzIwLDMyMCwxMjAwLDMyMCwxMDgwLDMyMEM5NjAsMzIwLDg0MCwzMjAsNzIwLDMyMEM2MDAsMzIwLDQ4MCwzMjAsMzYwLDMyMEMyNDAsMzIwLDEyMCwzMjAsNjAsMzIwTDAsMzIwWiI+PC9wYXRoPgogICAgPC9zdmc+CgogICAgPCEtLSBMZWZ0IEZvbGlhZ2UgLS0+CiAgICA8c3ZnIGNsYXNzPSJmb2xpYWdlLWxlZnQiIHZpZXdCb3g9IjAgMCAzNTAgNDAwIiBmaWxsPSJub25lIj4KICAgICAgICA8cGF0aCBkPSJNLTUwIDQ1MCBDIDUwIDM1MCwgMTAwIDI1MCwgNDAgMTgwIEMgMTAgMTQwLCAtMzAgMjAwLCAtNTAgNDUwIFoiIGZpbGw9IiMyZTdkMzIiIG9wYWNpdHk9IjAuODUiLz4KICAgICAgICA8cGF0aCBkPSJNLTYwIDQ1MCBDIDIwIDMyMCwgMTUwIDI4MCwgMTIwIDIyMCBDIDkwIDE3MCwgMCAyNTAsIC02MCA0NTAgWiIgZmlsbD0iIzQzYTA0NyIgb3BhY2l0eT0iMC45Ii8+CiAgICAgICAgPHBhdGggZD0iTS00MCA0NTAgQyA0MCAzODAsIDEyMCAzNDAsIDkwIDI4MCBDIDYwIDIyMCwgLTEwIDMyMCwgLTQwIDQ1MCBaIiBmaWxsPSIjODFjNzg0IiBvcGFjaXR5PSIwLjk1Ii8+CiAgICAgICAgPHBhdGggZD0iTS04MCA0NTAgQyAtMjAgMzAwLCA2MCAyMjAsIDEwIDE2MCBDIC0zMCAxMTAsIC05MCAyNDAsIC04MCA0NTAgWiIgZmlsbD0iIzFiNWUyMCIgb3BhY2l0eT0iMC43NSIvPgogICAgPC9zdmc+CgogICAgPCEtLSBSaWdodCBGb2xpYWdlIC0tPgogICAgPHN2ZyBjbGFzcz0iZm9saWFnZS1yaWdodCIgdmlld0JveD0iMCAwIDM1MCA0MDAiIGZpbGw9Im5vbmUiPgogICAgICAgIDxwYXRoIGQ9Ik00MDAgNDUwIEMgMzAwIDM1MCwgMjUwIDI1MCwgMzEwIDE4MCBDIDM0MCAxNDAsIDM4MCAyMDAsIDQwMCA0NTAgWiIgZmlsbD0iIzJlN2QzMiIgb3BhY2l0eT0iMC44NSIvPgogICAgICAgIDxwYXRoIGQ9Ik00MTAgNDUwIEMgMzMwIDMyMCwgMjAwIDI4MCwgMjMwIDIyMCBDIDI2MCAxNzAsIDM1MCAyNTAsIDQxMCA0NTAgWiIgZmlsbD0iIzQzYTA0NyIgb3BhY2l0eT0iMC45Ii8+CiAgICAgICAgPHBhdGggZD0iTTM5MCA0NTAgQyAzMTAgMzgwLCAyMzAgMzQwLCAyNjAgMjgwIEMgMjkwIDIyMCwgMzYwIDMyMCwgMzkwIDQ1MCBaIiBmaWxsPSIjODFjNzg0IiBvcGFjaXR5PSIwLjk1Ii8+CiAgICAgICAgPHBhdGggZD0iTTQzMCA0NTAgQyAzNzAgMzAwLCAyOTAgMjIwLCAzNDAgMTYwIEMgMzgwIDExMCwgNDQwIDI0MCwgNDMwIDQ1MCBaIiBmaWxsPSIjMWI1ZTIwIiBvcGFjaXR5PSIwLjc1Ii8+CiAgICA8L3N2Zz4KCiAgICA8ZGl2IGNsYXNzPSJjYXJkIj4KICAgICAgICA8ZGl2IGNsYXNzPSJpY29uLXdyYXAiPgogICAgICAgICAgICA8c3BhbiBjbGFzcz0idGljayB0aWNrLTEiPjwvc3Bhbj4KICAgICAgICAgICAgPHNwYW4gY2xhc3M9InRpY2sgdGljay0yIj48L3NwYW4+CiAgICAgICAgICAgIDxzcGFuIGNsYXNzPSJ0aWNrIHRpY2stMyI+PC9zcGFuPgogICAgICAgICAgICA8c3BhbiBjbGFzcz0idGljayB0aWNrLTQiPjwvc3Bhbj4KICAgICAgICAgICAgPGRpdiBjbGFzcz0iaWNvbi1jaXJjbGUiPgogICAgICAgICAgICAgICAgPHN2ZyB3aWR0aD0iMzQiIGhlaWdodD0iMzQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMy41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPgogICAgICAgICAgICAgICAgICAgIDxwb2x5bGluZSBwb2ludHM9IjIwIDYgOSAxNyA0IDEyIj48L3BvbHlsaW5lPgogICAgICAgICAgICAgICAgPC9zdmc+CiAgICAgICAgICAgIDwvZGl2PgogICAgICAgIDwvZGl2PgogICAgICAgIDxoMT5BdXRoZW50aWNhdGlvbiBTdWNjZXNzZnVsITwvaDE+CiAgICAgICAgPHA+WW91IGNhbiBjbG9zZSB0aGlzIHRhYiBhbmQgcmV0dXJuIHRvIHlvdXIgdGVybWluYWwuPC9wPgogICAgICAgIDxkaXYgY2xhc3M9ImRpdmlkZXIiPjwvZGl2PgogICAgICAgIDxkaXY+CiAgICAgICAgICAgIDxidXR0b24gY2xhc3M9ImJ0biIgb25jbGljaz0id2luZG93LmNsb3NlKCkiPgogICAgICAgICAgICAgICAgPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMi41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPgogICAgICAgICAgICAgICAgICAgIDxwYXRoIGQ9Ik0zIDEyYTkgOSAwIDEgMCA5LTkgOS43NSA5Ljc1IDAgMCAwLTYuNzQgMi43NEwzIDgiLz4KICAgICAgICAgICAgICAgICAgICA8cGF0aCBkPSJNMyAzdjVoNSIvPgogICAgICAgICAgICAgICAgPC9zdmc+CiAgICAgICAgICAgICAgICBSZXR1cm4gdG8gQXBwCiAgICAgICAgICAgIDwvYnV0dG9uPgogICAgICAgIDwvZGl2PgogICAgPC9kaXY+CgogICAgPGRpdiBjbGFzcz0iZm9vdGVyLW5vdGUiPgogICAgICAgIDxzdmcgdmlld0JveD0iMCAwIDI0IDI0Ij4KICAgICAgICAgICAgPHBhdGggZD0iTTEyIDIyczgtNCA4LTEwVjVsLTgtMy04IDN2N2MwIDYgOCAxMCA4IDEweiIvPgogICAgICAgIDwvc3ZnPgogICAgICAgIFlvdSBtYXkgc2FmZWx5IGNsb3NlIHRoaXMgd2luZG93LgogICAgPC9kaXY+CgogICAgPHNjcmlwdD4KICAgICAgICBzZXRUaW1lb3V0KGZ1bmN0aW9uKCkgewogICAgICAgICAgICB0cnkgeyB3aW5kb3cuY2xvc2UoKTsgfSBjYXRjaChlKSB7fQogICAgICAgIH0sIDYwMDApOwogICAgPC9zY3JpcHQ+CjwvYm9keT4KPC9odG1sPg0K").decode("utf-8")
@@ -555,56 +539,42 @@ def cmd_list():
         print(f"\x1b[1;33m* ?? {curr_email:<28} [unsaved] Run 'agi-auth login' to save\x1b[0m")
 
 
+OAUTH_PRIMARY_CLIENT = CLIENT_CONFIGS[1]
+
+OAUTH_SCOPES = [
+    "https://www.googleapis.com/auth/cloud-platform",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+    "https://www.googleapis.com/auth/cclog",
+    "https://www.googleapis.com/auth/experimentsandconfigs",
+    "https://www.googleapis.com/auth/aicode",
+    "openid"
+]
+
+REDIRECT_URI = "https://antigravity.google/oauth-callback"
+
+
 def perform_direct_google_oauth(name=None):
-    """Direct Google OAuth PKCE flow (opens browser, receives token, saves profile)."""
+    """Direct Google OAuth PKCE flow using official Antigravity endpoint."""
     verifier = secrets.token_urlsafe(64)
     digest = hashlib.sha256(verifier.encode("ascii")).digest()
     challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
-
-    auth_code_received = [None]
-    server_error = [None]
-
-    class OAuthHandler(http.server.BaseHTTPRequestHandler):
-        def log_message(self, format, *args):
-            pass
-
-        def do_GET(self):
-            parsed = urllib.parse.urlparse(self.path)
-            params = urllib.parse.parse_qs(parsed.query)
-
-            if "code" in params:
-                auth_code_received[0] = params["code"][0]
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(SUCCESS_HTML.encode("utf-8"))
-            elif "error" in params:
-                server_error[0] = params.get("error_description", params["error"])[0]
-                self.send_response(400)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(b"<html><body style='font-family:sans-serif;padding:40px;text-align:center;'><h2>Authentication failed.</h2></body></html>")
-            else:
-                self.send_response(404)
-                self.end_headers()
-
-    server = socketserver.TCPServer(("127.0.0.1", 0), OAuthHandler)
-    port = server.server_address[1]
-    redirect_uri = f"http://127.0.0.1:{port}"
+    state = secrets.token_urlsafe(32)
 
     auth_params = {
+        "access_type": "offline",
         "client_id": OAUTH_PRIMARY_CLIENT["id"],
-        "redirect_uri": redirect_uri,
-        "response_type": "code",
-        "scope": " ".join(OAUTH_SCOPES),
         "code_challenge": challenge,
         "code_challenge_method": "S256",
-        "access_type": "offline",
-        "prompt": "select_account"
+        "prompt": "consent",
+        "redirect_uri": REDIRECT_URI,
+        "response_type": "code",
+        "scope": " ".join(OAUTH_SCOPES),
+        "state": state
     }
-    auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(auth_params)
+    auth_url = "https://accounts.google.com/o/oauth2/auth?" + urllib.parse.urlencode(auth_params)
 
-    print("\x1b[1;36m[>] Opening Google OAuth in your browser...\x1b[0m")
+    print("\n\x1b[1;36m[>] Opening Google OAuth in your browser...\x1b[0m")
     print(f"\x1b[90mIf your browser does not open automatically, copy and open this URL:\x1b[0m\n\x1b[4;34m{auth_url}\x1b[0m\n")
 
     try:
@@ -612,29 +582,21 @@ def perform_direct_google_oauth(name=None):
     except Exception:
         pass
 
-    server_thread = threading.Thread(target=server.handle_request)
-    server_thread.daemon = True
-    server_thread.start()
-
-    print("\x1b[90mWaiting for authentication to complete in browser (Timeout: 120s)...\x1b[0m")
-    start_time = time.time()
-    while server_thread.is_alive():
-        if time.time() - start_time > 120:
-            print("\x1b[91m[Error] Authentication timed out after 120 seconds.\x1b[0m")
-            server.server_close()
-            return False
-        time.sleep(0.5)
-
-    server.server_close()
-
-    if server_error[0]:
-        print(f"\x1b[91m[Error] OAuth error: {server_error[0]}\x1b[0m")
+    print("\x1b[93mAfter completing login in your browser, copy the authorization code.\x1b[0m")
+    raw_code = input("\x1b[1;32mPaste authorization code (or URL) here: \x1b[0m").strip()
+    if not raw_code:
+        print("\x1b[91m[Error] No authorization code provided.\x1b[0m")
         return False
 
-    code = auth_code_received[0]
-    if not code:
-        print("\x1b[91m[Error] Did not receive authorization code.\x1b[0m")
-        return False
+    code = raw_code
+    if ("code=" in code or "http" in code) and ("?" in code or "&" in code):
+        try:
+            parsed = urllib.parse.urlparse(code)
+            qs = urllib.parse.parse_qs(parsed.query)
+            if "code" in qs:
+                code = qs["code"][0]
+        except Exception:
+            pass
 
     token_url = "https://oauth2.googleapis.com/token"
     token_payload = urllib.parse.urlencode({
@@ -642,7 +604,7 @@ def perform_direct_google_oauth(name=None):
         "client_secret": OAUTH_PRIMARY_CLIENT["secret"],
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": redirect_uri,
+        "redirect_uri": REDIRECT_URI,
         "code_verifier": verifier
     }).encode("utf-8")
 
@@ -655,7 +617,7 @@ def perform_direct_google_oauth(name=None):
                 "User-Agent": "Mozilla/5.0"
             }
         )
-        with urllib.request.urlopen(token_req, timeout=10) as resp:
+        with urllib.request.urlopen(token_req, timeout=15) as resp:
             token_res = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         err_msg = e.read().decode("utf-8", errors="ignore")
