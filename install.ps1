@@ -26,9 +26,9 @@ Set-Content -Path "$BinDir\agi-auth.cmd" -Value $cmdContent -Encoding ASCII
 Set-Content -Path "$env:USERPROFILE\.local\bin\agi-auth.cmd" -Value $cmdContent -Encoding ASCII
 
 # 2. Download Statusline Script & Configuration
-$StatuslinePs1Path = "$GeminiDir\statusline.ps1"
+$StatuslinePyPath = "$GeminiDir\statusline.py"
 $StatuslineJsonPath = "$GeminiDir\statusline.json"
-Invoke-WebRequest -Uri "$BaseUrl/statusline/statusline.ps1?t=$Timestamp" -Headers @{ "Cache-Control" = "no-cache"; "Pragma" = "no-cache" } -OutFile $StatuslinePs1Path -UseBasicParsing
+Invoke-WebRequest -Uri "$BaseUrl/statusline/statusline.py?t=$Timestamp" -Headers @{ "Cache-Control" = "no-cache"; "Pragma" = "no-cache" } -OutFile $StatuslinePyPath -UseBasicParsing
 
 if (!(Test-Path $StatuslineJsonPath)) {
     Invoke-WebRequest -Uri "$BaseUrl/statusline/statusline.json?t=$Timestamp" -Headers @{ "Cache-Control" = "no-cache"; "Pragma" = "no-cache" } -OutFile $StatuslineJsonPath -UseBasicParsing
@@ -42,7 +42,7 @@ $settingsPaths = @(
     "$env:APPDATA\agy\settings.json"
 )
 
-$statusLineCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File $StatuslinePs1Path"
+$statusLineCommand = "python `"$StatuslinePyPath`""
 
 foreach ($sPath in $settingsPaths) {
     try {

@@ -38,6 +38,7 @@ chmod +x "$INSTALL_DIR/bin/agi-auth"
 ln -sf "$INSTALL_DIR/bin/agi-auth" "$BIN_DIR/agi-auth"
 
 # 2. Download Statusline Script & Configuration
+download_file "$BASE_URL/statusline/statusline.py?t=$TIMESTAMP" "$GEMINI_DIR/statusline.py"
 download_file "$BASE_URL/statusline/statusline.sh?t=$TIMESTAMP" "$GEMINI_DIR/statusline.sh"
 chmod +x "$GEMINI_DIR/statusline.sh"
 
