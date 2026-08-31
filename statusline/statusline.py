@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Cross-Platform Statusline for Google Antigravity CLI (agy)
@@ -240,6 +240,22 @@ def main():
     # ─── Build Quotas ───────────────────────────────────────────────────────────
     quota_lines = []
     quotas = data.get("quota") or {}
+    plan_tier = data.get("plan_tier") or ""
+
+    # Cache live quota for agi-auth
+    if quotas or (plan_tier and plan_tier != "null"):
+        try:
+            cache_file = os.path.expanduser("~/.gemini/quota_cache.json")
+            cache_data = {
+                "plan_tier": plan_tier if plan_tier != "null" else "Standard",
+                "quota": quotas,
+                "updated_at": datetime.now().isoformat()
+            }
+            with open(cache_file, "w", encoding="utf-8") as cf:
+                json.dump(cache_data, cf, indent=2)
+        except Exception:
+            pass
+
     if config["show_quota"] and quotas:
         is_3p = any(x in model_id for x in ["claude", "anthropic", "3p"])
         pool_prefix = "3p" if is_3p else "gemini"

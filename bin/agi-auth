@@ -321,8 +321,8 @@ def format_relative_time(mtime, is_active=False):
     return f"{days}d ago"
 
 
-def format_usage_dt(q_data):
-    """Calculate REMAINING quota percentage and format reset time (HH:mm on dd MMM)."""
+def format_usage_dt(q_data, is_5h=False):
+    """Calculate REMAINING quota percentage and format reset time."""
     if not q_data:
         return "-"
     rem = q_data.get("remaining_fraction")
@@ -336,7 +336,10 @@ def format_usage_dt(q_data):
         dt = parse_iso_dt(res)
         if dt:
             local_dt = dt.astimezone()
-            time_str = local_dt.strftime("%H:%M on %d %b")
+            if is_5h:
+                time_str = local_dt.strftime("%H:%M")
+            else:
+                time_str = local_dt.strftime("%H:%M, %d %b")
             return f"{remain_str} ({time_str})"
     return remain_str
 
@@ -467,10 +470,78 @@ def check_account_health(acc_record):
     return {"status": "OK", "message": "OK"}
 
 
+def sync_active_session():
+    """Auto-detect and import/sync active session from OS Credential Vault into ~/.gemini/accounts/."""
+    try:
+        curr_raw = cred_read()
+        if not curr_raw:
+            return None
+
+        curr_obj = json.loads(curr_raw)
+        tok_data = curr_obj.get("token")
+        if not tok_data or not isinstance(tok_data, dict):
+            return None
+
+        curr_key = get_token_key(curr_raw)
+        ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
+        saved_files = sorted(ACCOUNTS_DIR.glob("*.json"))
+
+        matched_file = None
+        for f in saved_files:
+            try:
+                f_content = f.read_text(encoding="utf-8")
+                f_obj = json.loads(f_content)
+                f_key = get_token_key(f_content)
+                if curr_key and f_key == curr_key:
+                    matched_file = f
+                    break
+                if curr_obj.get("email") and f_obj.get("email") and curr_obj["email"].lower() == f_obj["email"].lower():
+                    matched_file = f
+                    break
+            except Exception:
+                pass
+
+        access_token = ensure_valid_token(curr_obj, matched_file)
+        email = curr_obj.get("email")
+        if not email and access_token:
+            email = fetch_account_email(access_token)
+            if email:
+                curr_obj["email"] = email
+                try:
+                    cred_write(CRED_TARGET, json.dumps(curr_obj), CRED_USER)
+                except Exception:
+                    pass
+
+        if matched_file:
+            try:
+                f_content = matched_file.read_text(encoding="utf-8")
+                f_obj = json.loads(f_content)
+                updated = False
+                if email and f_obj.get("email") != email:
+                    f_obj["email"] = email
+                    updated = True
+                if tok_data and f_obj.get("token", {}).get("access_token") != tok_data.get("access_token"):
+                    f_obj["token"] = tok_data
+                    updated = True
+                if updated:
+                    matched_file.write_text(json.dumps(f_obj, indent=2), encoding="utf-8")
+            except Exception:
+                pass
+            return matched_file
+        else:
+            file_name = email if email else f"account_{int(time.time())}"
+            target_file = ACCOUNTS_DIR / f"{file_name}.json"
+            target_file.write_text(json.dumps(curr_obj, indent=2), encoding="utf-8")
+            return target_file
+    except Exception:
+        return None
+
+
 def find_account_file(identifier):
     """Find account profile by index, alias, or email."""
     if not identifier:
         return None
+    sync_active_session()
     ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
     saved_files = sorted(ACCOUNTS_DIR.glob("*.json"))
 
@@ -498,13 +569,19 @@ def find_account_file(identifier):
 
 def cmd_list():
     """List all saved accounts with dynamic health/eligibility checks."""
+    sync_active_session()
     ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
     saved_files = sorted(ACCOUNTS_DIR.glob("*.json"))
     curr_raw = cred_read()
     curr_key = get_token_key(curr_raw)
     quota_info = get_cached_quota()
 
-    header = "     ACCOUNT                         PLAN            5H REMAIN               WEEKLY REMAIN          LAST ACTIVITY"
+    h_acc = "ACCOUNT"
+    h_plan = "PLAN"
+    h_5h = "5H REMAIN"
+    h_wk = "WEEKLY REMAIN"
+    h_act = "LAST ACTIVITY"
+    header = f"     {h_acc:<26} {h_plan:<14} {h_5h:<15} {h_wk:<20} {h_act:<13}"
     print(header)
     print("-" * len(header))
 
@@ -572,15 +649,15 @@ def cmd_list():
                 live_q = quota_info.get("quota") or {}
                 if live_q:
                     acc_obj["quota"] = live_q
-                    q_5h = format_usage_dt(live_q.get("gemini-5h"))
-                    q_wk = format_usage_dt(live_q.get("gemini-weekly"))
+                    q_5h = format_usage_dt(live_q.get("gemini-5h"), is_5h=True)
+                    q_wk = format_usage_dt(live_q.get("gemini-weekly"), is_5h=False)
                 
                 f.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
             elif "quota" in acc_obj:
                 plan = acc_obj.get("plan_tier", plan)
                 saved_q = acc_obj.get("quota") or {}
-                q_5h = format_usage_dt(saved_q.get("gemini-5h"))
-                q_wk = format_usage_dt(saved_q.get("gemini-weekly"))
+                q_5h = format_usage_dt(saved_q.get("gemini-5h"), is_5h=True)
+                q_wk = format_usage_dt(saved_q.get("gemini-weekly"), is_5h=False)
         else:
             q_5h = health["status"]
             q_wk = health["status"]
@@ -594,15 +671,17 @@ def cmd_list():
         marker = "* " if is_active else "  "
         idx_str = f"{idx:02d}"
 
+        disp_col = displayName if len(displayName) <= 26 else (displayName[:23] + "...")
+
         if is_active:
             if health["status"] == "OK":
-                print(f"\x1b[1;32m{marker}{idx_str} {displayName:<31} {plan:<15} {q_5h:<23} {q_wk:<22} {rel_time:<13}\x1b[0m")
+                print(f"\x1b[1;32m{marker}{idx_str} {disp_col:<26} {plan:<14} {q_5h:<15} {q_wk:<20} {rel_time:<13}\x1b[0m")
             else:
-                print(f"\x1b[1;31m{marker}{idx_str} {displayName:<31} {plan:<15} {q_5h:<23} {q_wk:<22} {rel_time:<13}\x1b[0m")
+                print(f"\x1b[1;31m{marker}{idx_str} {disp_col:<26} {plan:<14} {q_5h:<15} {q_wk:<20} {rel_time:<13}\x1b[0m")
         elif health["status"] != "OK":
-            print(f"\x1b[93m{marker}{idx_str} {displayName:<31} {plan:<15} {q_5h:<23} {q_wk:<22} {rel_time:<13}\x1b[0m")
+            print(f"\x1b[93m{marker}{idx_str} {disp_col:<26} {plan:<14} {q_5h:<15} {q_wk:<20} {rel_time:<13}\x1b[0m")
         else:
-            print(f"{marker}{idx_str} {displayName:<31} {plan:<15} {q_5h:<23} {q_wk:<22} {rel_time:<13}")
+            print(f"{marker}{idx_str} {disp_col:<26} {plan:<14} {q_5h:<15} {q_wk:<20} {rel_time:<13}")
 
     if curr_raw and not has_active_match:
         curr_token = None
@@ -611,7 +690,7 @@ def cmd_list():
         except Exception:
             pass
         curr_email = fetch_account_email(curr_token) or "current session"
-        print(f"\x1b[1;33m* ?? {curr_email:<31} [unsaved] Run 'agi-auth login' to save\x1b[0m")
+        print(f"\x1b[1;33m* ?? {curr_email:<26} [unsaved] Run 'agi-auth login' to save\x1b[0m")
 
     if issues_found:
         print("\n\x1b[1;33m[!] Account Issues & Solutions:\x1b[0m")
@@ -782,6 +861,7 @@ def cmd_switch(identifier):
         print("\x1b[91m[Error] Missing account name or email. Usage: agi-auth switch <number_or_email>\x1b[0m")
         sys.exit(1)
 
+    sync_active_session()
     target_file = find_account_file(identifier)
     if not target_file:
         print(f"\x1b[91m[Error] Account or email '{identifier}' not found!\x1b[0m")
@@ -793,6 +873,20 @@ def cmd_switch(identifier):
 
     secret_str = json.dumps(acc_obj) if "token" in acc_obj else target_file.read_text(encoding="utf-8")
     cred_write(CRED_TARGET, secret_str, CRED_USER)
+
+    if QUOTA_CACHE_FILE.exists():
+        try:
+            if "quota" in acc_obj:
+                cache_data = {
+                    "plan_tier": acc_obj.get("plan_tier", "Standard"),
+                    "quota": acc_obj.get("quota", {}),
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }
+                QUOTA_CACHE_FILE.write_text(json.dumps(cache_data, indent=2), encoding="utf-8")
+            else:
+                QUOTA_CACHE_FILE.unlink()
+        except Exception:
+            pass
     
     email = acc_obj.get("email")
     display_txt = email if email else target_file.stem
@@ -805,6 +899,7 @@ def cmd_remove(identifier):
         print("\x1b[91m[Error] Missing account name or email. Usage: agi-auth remove <number_or_email>\x1b[0m")
         sys.exit(1)
 
+    sync_active_session()
     target_file = find_account_file(identifier)
     if target_file and target_file.exists():
         target_file.unlink()
@@ -812,6 +907,19 @@ def cmd_remove(identifier):
     else:
         print(f"\x1b[93m[!] Account '{identifier}' does not exist.\x1b[0m")
 
+
+def cmd_sync():
+    """Explicitly sync/import active Antigravity session into saved accounts."""
+    saved_file = sync_active_session()
+    if saved_file:
+        try:
+            obj = json.loads(saved_file.read_text(encoding="utf-8"))
+            em = obj.get("email", saved_file.stem)
+            print(f"\x1b[1;32m[OK] Synced active session for '{em}'.\x1b[0m")
+        except Exception:
+            print(f"\x1b[1;32m[OK] Synced active session ({saved_file.stem}).\x1b[0m")
+    else:
+        print("\x1b[93m[!] No active Antigravity session found in vault to sync.\x1b[0m")
 
 
 def cmd_notify(bot_token=None, chat_id=None):
@@ -850,6 +958,7 @@ def print_help():
   agi-auth list                Xem danh sách tài khoản, Email, Quota & Trạng thái lỗi
   agi-auth switch <num/email>  Chuyển sang tài khoản (bằng Số thứ tự hoặc Email)
   agi-auth remove <num/email>  Xóa tài khoản (bằng Số thứ tự hoặc Email)
+  agi-auth sync                Tự động đồng bộ tài khoản đang đăng nhập hiện tại
   agi-auth notify [token] [id] Cấu hình Telegram notification (bot_token & chat_id)
 
 \x1b[1mQuick Run:\x1b[0m
@@ -874,6 +983,8 @@ def main():
         cmd_switch(arg1)
     elif action in ("remove", "rm", "delete"):
         cmd_remove(arg1)
+    elif action in ("sync", "import"):
+        cmd_sync()
     elif action in ("notify", "telegram"):
         cmd_notify(arg1, arg2)
     elif action in ("help", "--help", "-h"):

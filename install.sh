@@ -79,6 +79,9 @@ for RC in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.bash_profile"; do
     fi
 done
 
+# 6. Auto-sync existing active Antigravity session
+python3 "$INSTALL_DIR/bin/agi-auth" sync >/dev/null 2>&1 || true
+
 echo -e "\033[1;32m==> Installation / Update successful!\033[0m"
 echo ""
 echo -e "\033[1mFeatures Installed:\033[0m"
@@ -92,6 +95,7 @@ echo -e "  \033[36magi-auth login\033[0m          - Direct Google OAuth login & 
 echo -e "  \033[36magi-auth list\033[0m           - List all saved accounts, Email & Quota (Remain 5h/7d)"
 echo -e "  \033[36magi-auth switch <email>\033[0m - Switch account (by Number or Email)"
 echo -e "  \033[36magi-auth remove <email>\033[0m - Remove an account"
+echo -e "  \033[36magi-auth sync\033[0m           - Auto-sync active Antigravity session into accounts"
 echo -e "  \033[36magi-auth notify <token> <chat_id>\033[0m - Config Telegram Bot Token & Chat ID"
 echo -e "  \033[36magi\033[0m                     - Launch Antigravity CLI with statusline"
 echo ""

@@ -121,6 +121,11 @@ if ($currentProfile -notmatch "agi-auth") {
     Write-Host "Added 'agi' and 'agi-auth' to PowerShell `$PROFILE." -ForegroundColor Green
 }
 
+# 6. Auto-sync existing active Antigravity session
+try {
+    & python "$BinDir\agi-auth.py" sync | Out-Null
+} catch {}
+
 Write-Host ""
 Write-Host "==> Installation / Update successful!" -ForegroundColor Green
 Write-Host ""
@@ -135,6 +140,7 @@ Write-Host "  agi-auth login          - Direct Google OAuth login and auto-save 
 Write-Host "  agi-auth list           - List all accounts, Email, Quota (Remain 5h/7d) and Errors" -ForegroundColor Cyan
 Write-Host "  agi-auth switch <email> - Switch account (by Number or Email)" -ForegroundColor Cyan
 Write-Host "  agi-auth remove <email> - Remove an account" -ForegroundColor Cyan
+Write-Host "  agi-auth sync           - Auto-sync active Antigravity session into accounts" -ForegroundColor Cyan
 Write-Host "  agi-auth notify <token> <chat_id> - Config Telegram Bot Token & Chat ID" -ForegroundColor Cyan
 Write-Host "  agi                     - Launch Antigravity CLI with statusline" -ForegroundColor Cyan
 Write-Host ""
