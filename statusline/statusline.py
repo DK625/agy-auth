@@ -267,26 +267,29 @@ def main():
     # ─── Build Quotas ───────────────────────────────────────────────────────────
     quota_lines = []
     quotas = data.get("quota") or {}
-    plan_tier = data.get("plan_tier") or ""
-
-    # Isolated per-account quota storage (prevents cross-process pollution)
-    if quotas or (plan_tier and plan_tier != "null"):
-        try:
-            target_acc = os.environ.get("AGI_ACTIVE_ACCOUNT")
-            if not target_acc:
-                target_acc = get_active_email()
-            
-            if target_acc:
-                acc_path = Path.home() / ".gemini" / "accounts" / f"{target_acc}.json"
-                if acc_path.exists():
-                    acc_data = json.loads(acc_path.read_text(encoding="utf-8"))
-                    if plan_tier and plan_tier != "null":
-                        acc_data["plan_tier"] = plan_tier
-                    if quotas:
-                        acc_data["quota"] = quotas
-                    acc_path.write_text(json.dumps(acc_data, indent=2), encoding="utf-8")
-        except Exception:
-            pass
+    # Isolated per-account quota and status storage (prevents cross-process pollution)
+    try:
+        target_acc = os.environ.get("AGI_ACTIVE_ACCOUNT")
+        if not target_acc:
+            target_acc = get_active_email()
+        
+        if target_acc:
+            acc_path = Path.home() / ".gemini" / "accounts" / f"{target_acc}.json"
+            if acc_path.exists():
+                acc_data = json.loads(acc_path.read_text(encoding="utf-8"))
+                if plan_tier and plan_tier != "null":
+                    acc_data["plan_tier"] = plan_tier
+                if quotas:
+                    acc_data["quota"] = quotas
+                    acc_data.pop("error", None)
+                
+                err_msg = data.get("error") or data.get("error_message")
+                if err_msg:
+                    acc_data["error"] = str(err_msg)
+                
+                acc_path.write_text(json.dumps(acc_data, indent=2), encoding="utf-8")
+    except Exception:
+        pass
 
 
     if config["show_quota"] and quotas:

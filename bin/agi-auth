@@ -489,10 +489,15 @@ def cmd_list():
                     pass
 
             plan = acc_obj.get("plan_tier", "Standard")
+            error = acc_obj.get("error")
             q_5h = "-"
             q_wk = "-"
 
-            if "quota" in acc_obj:
+            if error:
+                plan = "Verify Req"
+                q_5h = "Error"
+                q_wk = "Need Verify"
+            elif "quota" in acc_obj:
                 saved_q = acc_obj.get("quota") or {}
                 q_5h, q_wk = extract_quota_strings(saved_q)
 
