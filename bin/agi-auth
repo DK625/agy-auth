@@ -462,14 +462,11 @@ def cmd_list():
     saved_files = sorted(ACCOUNTS_DIR.glob("*.json"))
     curr_raw = cred_read()
     curr_key = get_token_key(curr_raw)
-    quota_info = get_cached_quota()
 
     h_acc = "ACCOUNT"
-    h_plan = "PLAN"
-    h_5h = "5H REMAIN"
-    h_wk = "WEEKLY REMAIN"
+    h_type = "AUTH TYPE"
     h_act = "LAST ACTIVITY"
-    header = f"     {h_acc:<28} {h_plan:<14} {h_5h:<15} {h_wk:<20} {h_act:<13}"
+    header = f"     {h_acc:<32} {h_type:<20} {h_act:<15}"
     print(header)
     print("-" * len(header))
 
@@ -501,41 +498,18 @@ def cmd_list():
                 except Exception:
                     pass
 
-            plan = acc_obj.get("plan_tier", "Standard")
-            q_5h = "-"
-            q_wk = "-"
-
-            cached_acc = (quota_info.get("email") or quota_info.get("account") or "") if quota_info else ""
-            matches_cache = bool(cached_acc and cached_acc.lower() == email.lower())
-
-            if is_active and quota_info and matches_cache:
-                live_tier = quota_info.get("plan_tier")
-                if live_tier and live_tier != "null":
-                    plan = live_tier
-                    acc_obj["plan_tier"] = plan
-                
-                live_q = quota_info.get("quota") or {}
-                if live_q:
-                    acc_obj["quota"] = live_q
-                    q_5h, q_wk = extract_quota_strings(live_q)
-                
-                f.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
-            elif "quota" in acc_obj:
-                plan = acc_obj.get("plan_tier", plan)
-                saved_q = acc_obj.get("quota") or {}
-                q_5h, q_wk = extract_quota_strings(saved_q)
-
+            auth_type = acc_obj.get("auth_method", "consumer").capitalize() + " (OAuth)"
             mtime = f.stat().st_mtime
             rel_time = format_relative_time(mtime, is_active=is_active)
             
             marker = "* " if is_active else "  "
             idx_str = f"{idx:02d}"
-            disp_col = email if len(email) <= 28 else (email[:25] + "...")
+            disp_col = email if len(email) <= 32 else (email[:29] + "...")
 
             if is_active:
-                print(f"\x1b[1;32m{marker}{idx_str} {disp_col:<28} {plan:<14} {q_5h:<15} {q_wk:<20} {rel_time:<13}\x1b[0m")
+                print(f"\x1b[1;32m{marker}{idx_str} {disp_col:<32} {auth_type:<20} {rel_time:<15}\x1b[0m")
             else:
-                print(f"{marker}{idx_str} {disp_col:<28} {plan:<14} {q_5h:<15} {q_wk:<20} {rel_time:<13}")
+                print(f"{marker}{idx_str} {disp_col:<32} {auth_type:<20} {rel_time:<15}")
         except Exception:
             pass
 
@@ -546,7 +520,7 @@ def cmd_list():
         except Exception:
             pass
         curr_email = fetch_account_email(curr_token) or "current session"
-        print(f"\x1b[1;33m* ?? {curr_email:<28} [unsaved] Run 'agi-auth login' to save\x1b[0m")
+        print(f"\x1b[1;33m* ?? {curr_email:<32} [unsaved] Run 'agi-auth login' to save\x1b[0m")
 
 
 OAUTH_PRIMARY_CLIENT = CLIENT_CONFIGS[1]

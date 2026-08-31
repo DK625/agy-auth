@@ -269,34 +269,6 @@ def main():
     quotas = data.get("quota") or {}
     plan_tier = data.get("plan_tier") or ""
 
-    # Cache live quota for agi-auth
-    if quotas or (plan_tier and plan_tier != "null"):
-        try:
-            active_email = get_active_email()
-            cache_file = os.path.expanduser("~/.gemini/quota_cache.json")
-            cache_data = {
-                "email": active_email,
-                "plan_tier": plan_tier if plan_tier != "null" else "Standard",
-                "quota": quotas,
-                "updated_at": datetime.now().isoformat()
-            }
-            with open(cache_file, "w", encoding="utf-8") as cf:
-                json.dump(cache_data, cf, indent=2)
-
-            if active_email:
-                acc_path = Path.home() / ".gemini" / "accounts" / f"{active_email}.json"
-                if acc_path.exists():
-                    try:
-                        acc_data = json.loads(acc_path.read_text(encoding="utf-8"))
-                        if plan_tier and plan_tier != "null":
-                            acc_data["plan_tier"] = plan_tier
-                        if quotas:
-                            acc_data["quota"] = quotas
-                        acc_path.write_text(json.dumps(acc_data, indent=2), encoding="utf-8")
-                    except Exception:
-                        pass
-        except Exception:
-            pass
 
     if config["show_quota"] and quotas:
         is_3p = any(x in model_id for x in ["claude", "anthropic", "3p"])
