@@ -45,6 +45,13 @@ $NotifyJsonPath = "$GeminiDir\notify.json"
 Invoke-WebRequest -Uri "$BaseUrl/hooks/notify.py?t=$Timestamp" -Headers @{ "Cache-Control" = "no-cache"; "Pragma" = "no-cache" } -OutFile $NotifyPyPath -UseBasicParsing
 Invoke-WebRequest -Uri "$BaseUrl/hooks/hooks.json?t=$Timestamp" -Headers @{ "Cache-Control" = "no-cache"; "Pragma" = "no-cache" } -OutFile $HooksJsonPath -UseBasicParsing
 
+# Normalize hooks.json for Windows cmd execution
+if (Test-Path $HooksJsonPath) {
+    $hooksContent = Get-Content -Path $HooksJsonPath -Raw
+    $hooksContent = $hooksContent -replace '~/\.gemini/notify\.py', '%USERPROFILE%/.gemini/notify.py'
+    [System.IO.File]::WriteAllText($HooksJsonPath, $hooksContent, [System.Text.UTF8Encoding]::new($false))
+}
+
 if (!(Test-Path $NotifyJsonPath)) {
     Invoke-WebRequest -Uri "$BaseUrl/hooks/notify.json.example?t=$Timestamp" -Headers @{ "Cache-Control" = "no-cache"; "Pragma" = "no-cache" } -OutFile $NotifyJsonPath -UseBasicParsing
 }

@@ -72,3 +72,5 @@ if __name__ == "__main__":
     bot_token, chat_id = get_credentials()
     speak(msg)
     send_telegram(bot_token, chat_id, msg)
+    print(json.dumps({"decision": "allow"}))
+
