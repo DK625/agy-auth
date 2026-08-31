@@ -46,7 +46,17 @@ if [ ! -f "$GEMINI_DIR/statusline.json" ]; then
     download_file "$BASE_URL/statusline/statusline.json?t=$TIMESTAMP" "$GEMINI_DIR/statusline.json"
 fi
 
-# 3. Configure settings.json for Antigravity
+# 3. Download Lifecycle Hooks & Notification Script
+mkdir -p "$GEMINI_DIR/config"
+download_file "$BASE_URL/hooks/notify.py?t=$TIMESTAMP" "$GEMINI_DIR/notify.py"
+download_file "$BASE_URL/hooks/hooks.json?t=$TIMESTAMP" "$GEMINI_DIR/config/hooks.json"
+chmod +x "$GEMINI_DIR/notify.py"
+
+if [ ! -f "$GEMINI_DIR/notify.json" ]; then
+    download_file "$BASE_URL/hooks/notify.json.example?t=$TIMESTAMP" "$GEMINI_DIR/notify.json"
+fi
+
+# 4. Configure settings.json for Antigravity
 for CONF in "$GEMINI_DIR/antigravity-cli/settings.json" "$GEMINI_DIR/settings.json" "$HOME/.config/antigravity/settings.json"; do
     mkdir -p "$(dirname "$CONF")"
     if [ ! -f "$CONF" ]; then
@@ -54,7 +64,7 @@ for CONF in "$GEMINI_DIR/antigravity-cli/settings.json" "$GEMINI_DIR/settings.js
     fi
 done
 
-# 4. Setup Shell Profile (bash / zsh)
+# 5. Setup Shell Profile (bash / zsh)
 CONFIG_LINES="
 # --- agi & agi-auth ---
 export PATH=\"\$HOME/.local/bin:\$HOME/.agi-auth/bin:\$PATH\"
@@ -75,13 +85,16 @@ echo -e "\033[1mFeatures Installed:\033[0m"
 echo -e "  \033[32m✔ agi-auth CLI\033[0m         - Multi-account OAuth manager with real-time health checks"
 echo -e "  \033[32m✔ agi Shortcut\033[0m         - Fast launcher with --dangerously-skip-permissions"
 echo -e "  \033[32m✔ Antigravity Statusline\033[0m - Real-time model, branch, remain context bar & 5h/7d quota bars"
+echo -e "  \033[32m✔ Task & Telegram Hooks\033[0m  - Speech TTS & Telegram notifications on task completion"
 echo ""
 echo -e "\033[1mUsage:\033[0m"
 echo -e "  \033[36magi-auth login\033[0m          - Direct Google OAuth login & auto-save by Email"
 echo -e "  \033[36magi-auth list\033[0m           - List all saved accounts, Email & Quota (Remain 5h/7d)"
 echo -e "  \033[36magi-auth switch <email>\033[0m - Switch account (by Number or Email)"
 echo -e "  \033[36magi-auth remove <email>\033[0m - Remove an account"
+echo -e "  \033[36magi-auth notify <token> <chat_id>\033[0m - Config Telegram Bot Token & Chat ID"
 echo -e "  \033[36magi\033[0m                     - Launch Antigravity CLI with statusline"
 echo ""
 echo -e "\033[90mRestart your terminal or run: source ~/.bashrc (or ~/.zshrc)\033[0m"
+
 

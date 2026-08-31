@@ -90,6 +90,18 @@ agi-auth remove 03
 agi-auth remove onehammer256@gmail.com
 ```
 
+### 5. Cấu hình Telegram Notification & Task Speech Hook
+Tự động phát âm thanh (TTS Speech) và gửi tin nhắn Telegram khi Agent **hoàn thành task (`Stop`)** hoặc **cần hỏi người dùng (`ask_question`)**:
+```bash
+# Xem trạng thái cấu hình Telegram hiện tại
+agi-auth notify
+
+# Cấu hình Bot Token & Chat ID Telegram
+agi-auth notify <YOUR_TELEGRAM_BOT_TOKEN> <YOUR_TELEGRAM_CHAT_ID>
+```
+*Thông tin Credential Telegram sẽ được lưu cục bộ tại `~/.gemini/notify.json` (không push lên Git).*
+*Hoặc bạn cũng có thể set qua biến môi trường: `TELEGRAM_BOT_TOKEN` và `TELEGRAM_CHAT_ID`.*
+
 ---
 
 ## 🏎️ Quick CLI Shortcut: `agi`
@@ -106,6 +118,7 @@ agi
 * **Native OAuth 2.0 PKCE:** Xác thực nhanh, an toàn, có UI success page đẹp mắt.
 * **Token Lifecycle Auto-Refresh:** Tự động làm mới access token khi hết hạn.
 * **Real-Time Health Checks:** Tự động phát hiện tài khoản bị khóa TOS (`Disabled`), cần xác thực (`Verify Required`), chưa kích hoạt web (`TOS Required`) kèm link xử lý trực tiếp.
+* **Lifecycle Hooks & Telegram Notification:** Đăng ký tự động hook `Stop` và `PreToolUse` để phát giọng nói và thông báo qua Telegram khi agent làm xong việc hay hỏi ý kiến. Credentials lưu an toàn tại máy người dùng.
 * **Zero Dependency:** Sử dụng thuần Python Standard Library và Native PowerShell/.NET.
 * **Bảo mật:** Lưu trữ an toàn bằng Windows Credential Manager (`advapi32.dll`) trên Windows và Keyring trên Unix.
 
@@ -113,3 +126,4 @@ agi
 
 ## 📄 License
 MIT © [DK625](https://github.com/DK625)
+

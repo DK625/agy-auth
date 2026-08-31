@@ -813,6 +813,35 @@ def cmd_remove(identifier):
         print(f"\x1b[93m[!] Account '{identifier}' does not exist.\x1b[0m")
 
 
+
+def cmd_notify(bot_token=None, chat_id=None):
+    """View or configure Telegram notification credentials."""
+    notify_json_path = Path.home() / ".gemini" / "notify.json"
+
+    if bot_token and chat_id:
+        cfg = {"telegram_bot_token": bot_token, "telegram_chat_id": chat_id}
+        notify_json_path.parent.mkdir(parents=True, exist_ok=True)
+        notify_json_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+        print("\x1b[1;32m[OK] Telegram notification credentials saved successfully to ~/.gemini/notify.json!\x1b[0m")
+    else:
+        print("\x1b[1;36m=== Telegram Notification Config ===\x1b[0m")
+        if notify_json_path.exists():
+            try:
+                cfg = json.loads(notify_json_path.read_text(encoding="utf-8"))
+                token = cfg.get("telegram_bot_token", "")
+                cid = cfg.get("telegram_chat_id", "")
+                masked_token = (token[:6] + "..." + token[-4:]) if len(token) > 10 else ("Configured" if token else "Not set")
+                print(f"  Bot Token: {masked_token}")
+                print(f"  Chat ID:   {cid if cid else 'Not set'}")
+            except Exception as e:
+                print(f"  Error reading config: {e}")
+        else:
+            print("  Status: Not configured yet")
+
+        print("\n\x1b[1mTo configure Telegram notifications, run:\x1b[0m")
+        print("  agi-auth notify <bot_token> <chat_id>\n")
+
+
 def print_help():
     print("""\x1b[1;36magi-auth\x1b[0m - Multi-account manager for Antigravity CLI (agy)
 
@@ -821,6 +850,7 @@ def print_help():
   agi-auth list                Xem danh sách tài khoản, Email, Quota & Trạng thái lỗi
   agi-auth switch <num/email>  Chuyển sang tài khoản (bằng Số thứ tự hoặc Email)
   agi-auth remove <num/email>  Xóa tài khoản (bằng Số thứ tự hoặc Email)
+  agi-auth notify [token] [id] Cấu hình Telegram notification (bot_token & chat_id)
 
 \x1b[1mQuick Run:\x1b[0m
   agi                          Chạy agy với --dangerously-skip-permissions
@@ -833,16 +863,19 @@ def main():
         return
 
     action = sys.argv[1].lower()
-    arg = sys.argv[2] if len(sys.argv) > 2 else None
+    arg1 = sys.argv[2] if len(sys.argv) > 2 else None
+    arg2 = sys.argv[3] if len(sys.argv) > 3 else None
 
     if action in ("login", "signin"):
-        cmd_login(arg)
+        cmd_login(arg1)
     elif action in ("list", "ls"):
         cmd_list()
     elif action in ("switch", "use"):
-        cmd_switch(arg)
+        cmd_switch(arg1)
     elif action in ("remove", "rm", "delete"):
-        cmd_remove(arg)
+        cmd_remove(arg1)
+    elif action in ("notify", "telegram"):
+        cmd_notify(arg1, arg2)
     elif action in ("help", "--help", "-h"):
         print_help()
     else:
@@ -853,3 +886,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

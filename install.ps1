@@ -34,7 +34,22 @@ if (!(Test-Path $StatuslineJsonPath)) {
     Invoke-WebRequest -Uri "$BaseUrl/statusline/statusline.json?t=$Timestamp" -Headers @{ "Cache-Control" = "no-cache"; "Pragma" = "no-cache" } -OutFile $StatuslineJsonPath -UseBasicParsing
 }
 
-# 3. Configure Antigravity CLI Settings (statusLine command)
+# 3. Download Lifecycle Hooks & Notification Script
+$ConfigDir = "$GeminiDir\config"
+New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
+
+$NotifyPyPath = "$GeminiDir\notify.py"
+$HooksJsonPath = "$ConfigDir\hooks.json"
+$NotifyJsonPath = "$GeminiDir\notify.json"
+
+Invoke-WebRequest -Uri "$BaseUrl/hooks/notify.py?t=$Timestamp" -Headers @{ "Cache-Control" = "no-cache"; "Pragma" = "no-cache" } -OutFile $NotifyPyPath -UseBasicParsing
+Invoke-WebRequest -Uri "$BaseUrl/hooks/hooks.json?t=$Timestamp" -Headers @{ "Cache-Control" = "no-cache"; "Pragma" = "no-cache" } -OutFile $HooksJsonPath -UseBasicParsing
+
+if (!(Test-Path $NotifyJsonPath)) {
+    Invoke-WebRequest -Uri "$BaseUrl/hooks/notify.json.example?t=$Timestamp" -Headers @{ "Cache-Control" = "no-cache"; "Pragma" = "no-cache" } -OutFile $NotifyJsonPath -UseBasicParsing
+}
+
+# 4. Configure Antigravity CLI Settings (statusLine command)
 $settingsPaths = @(
     "$env:USERPROFILE\.gemini\antigravity-cli\settings.json",
     "$env:USERPROFILE\.gemini\settings.json",
@@ -75,7 +90,7 @@ foreach ($sPath in $settingsPaths) {
     } catch {}
 }
 
-# 4. Append to PowerShell Profile if not present
+# 5. Append to PowerShell Profile if not present
 $ProfileSnippet = @"
 
 # --- agi & agi-auth (Antigravity CLI Manager) ---
@@ -106,13 +121,16 @@ Write-Host "Features Installed:" -ForegroundColor White
 Write-Host "  [OK] agi-auth CLI         - Multi-account OAuth manager with real-time health checks" -ForegroundColor Green
 Write-Host "  [OK] agi Shortcut         - Fast launcher with --dangerously-skip-permissions" -ForegroundColor Green
 Write-Host "  [OK] Antigravity Statusline - Real-time model, branch, remain context & 5h/7d quota bars" -ForegroundColor Green
+Write-Host "  [OK] Task & Telegram Hooks - Speech TTS & Telegram notifications on task completion" -ForegroundColor Green
 Write-Host ""
 Write-Host "Usage:" -ForegroundColor White
 Write-Host "  agi-auth login          - Direct Google OAuth login and auto-save by Email" -ForegroundColor Cyan
 Write-Host "  agi-auth list           - List all accounts, Email, Quota (Remain 5h/7d) and Errors" -ForegroundColor Cyan
 Write-Host "  agi-auth switch <email> - Switch account (by Number or Email)" -ForegroundColor Cyan
 Write-Host "  agi-auth remove <email> - Remove an account" -ForegroundColor Cyan
+Write-Host "  agi-auth notify <token> <chat_id> - Config Telegram Bot Token & Chat ID" -ForegroundColor Cyan
 Write-Host "  agi                     - Launch Antigravity CLI with statusline" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Ready to use! Try running: agi-auth list" -ForegroundColor Gray
+
 

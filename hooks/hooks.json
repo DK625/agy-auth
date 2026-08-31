@@ -1,0 +1,23 @@
+{
+  "notifications": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "python ~/.gemini/notify.py \"agy completed\"",
+        "timeout": 30
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "ask_question",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python ~/.gemini/notify.py \"agy question\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
