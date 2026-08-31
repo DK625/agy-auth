@@ -272,9 +272,6 @@ def main():
     # Isolated per-account quota and status storage (prevents cross-process pollution)
     try:
         target_acc = os.environ.get("AGI_ACTIVE_ACCOUNT")
-        if not target_acc:
-            target_acc = get_active_email()
-        
         if target_acc:
             acc_path = Path.home() / ".gemini" / "accounts" / f"{target_acc}.json"
             if acc_path.exists():
@@ -284,6 +281,10 @@ def main():
                 if quotas:
                     acc_data["quota"] = quotas
                     acc_data.pop("error", None)
+                else:
+                    # If agi ran for this account but received no quota, mark as needing verification
+                    if not acc_data.get("quota"):
+                        acc_data["error"] = "Verify Required"
                 
                 err_msg = data.get("error") or data.get("error_message")
                 if err_msg:

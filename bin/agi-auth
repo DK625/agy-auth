@@ -494,8 +494,9 @@ def cmd_list():
             q_wk = "-"
 
             if error:
-                plan = "Verify Req"
-                q_5h = "Error"
+                err_str = str(error)
+                plan = "Error / Verify"
+                q_5h = err_str if len(err_str) <= 15 else (err_str[:12] + "...")
                 q_wk = "Need Verify"
             elif "quota" in acc_obj:
                 saved_q = acc_obj.get("quota") or {}
