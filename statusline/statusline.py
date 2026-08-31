@@ -10,6 +10,7 @@ import json
 import os
 import math
 from datetime import datetime
+from pathlib import Path
 
 # Ensure stdout/stdin uses UTF-8 encoding
 if sys.platform == "win32":
@@ -267,6 +268,7 @@ def main():
     # ─── Build Quotas ───────────────────────────────────────────────────────────
     quota_lines = []
     quotas = data.get("quota") or {}
+    plan_tier = data.get("plan_tier") or ""
     # Isolated per-account quota and status storage (prevents cross-process pollution)
     try:
         target_acc = os.environ.get("AGI_ACTIVE_ACCOUNT")
