@@ -56,10 +56,18 @@ Hiển thị tức thì danh sách tài khoản, Plan, Quota còn lại và lầ
      ACCOUNT                      PLAN           5H REMAIN       WEEKLY REMAIN        LAST ACTIVITY
 ---------------------------------------------------------------------------------------------------
   01 claude25602@gmail.com        Standard       -               -                    47m ago      
-  02 layaccantinao@gmail.com      Standard       -               -                    8m ago       
-* 03 minhha10c8@gmail.com         Google AI Pro  97% (06:47)     19% (16:28, 01 Sep)  Now          
-  04 supermanvnx001@gmail.com     Standard       -               -                    35m ago      
+* 02 minhha10c8@gmail.com         Google AI Pro  38% (06:47)     9% (16:28, 01 Sep)   Now          
+  03 supermanvnx001@gmail.com     Standard       85% (08:15)     95% (03:00, 08 Sep)  35m ago      
 ```
+
+#### 💡 Cơ chế cập nhật Quota (Quota Mechanism)
+* **Vì sao không gọi API get quota độc lập?** Google Antigravity **không cung cấp public REST endpoint độc lập** để tra cứu số dư Quota cho tài khoản cá nhân (Consumer / Google AI Pro). Thông tin quota chỉ được trả về trong luồng session nội bộ của Antigravity CLI khi người dùng mở phiên làm việc.
+* **Cơ chế Hooking thông minh:**
+  1. Khi bạn chạy `agi-auth login` hoặc `agi-auth switch`, `agi-auth` tự động khởi chạy `agi` dưới danh tính của tài khoản đó.
+  2. Ngay khi `agi` mở lên (hoặc trong mỗi lượt chat), `statusline` sẽ bắt ngay thông số Quota thực tế (`5h` / `Weekly`), Plan (`Google AI Pro` / `Standard`) và thông tin lỗi (nếu có), lưu cô lập riêng vào profile của tài khoản đó.
+  3. Khi chạy `agi-auth list`, dữ liệu Quota gần nhất sẽ được hiển thị ngay lập tức.
+  4. **Tự động phục hồi Real-Time (Dynamic Reset):** Khi đồng hồ thực tế vượt qua mốc giờ reset (`reset_time`), bảng `list` sẽ **tự động tính toán phục hồi về `100%`** mà không cần bạn phải mở lại `agi`.
+  5. Với tài khoản mới thêm chưa mở `agi` lần nào, bảng sẽ hiển thị dấu `-` cho đến phiên đăng nhập đầu tiên. Tài khoản gặp lỗi xác minh tài khoản sẽ hiển thị `Verify Req`.
 
 ### 3. Chuyển đổi tài khoản (Switch)
 Hỗ trợ chuyển bằng **Số thứ tự (Index)** hoặc **Email Google**:
