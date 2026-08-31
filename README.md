@@ -44,30 +44,21 @@ gemini 7d ●●●●●●○○○○  55% ⟳ sep 1, 16:28
 ```bash
 agi-auth login
 ```
-* **Mở trực tiếp link/trình duyệt** với giao diện Landing Page hiện đại để xác thực Google OAuth.
-* Tự động nhận diện Email Google (`@gmail.com`) và lưu profile.
+* **Mở trực tiếp trình duyệt** để xác thực Google OAuth PKCE.
+* Tự động nhận diện Email Google (`@gmail.com`), lưu profile và **mở ngay Antigravity CLI (`agi`)** để bắt đầu làm việc.
 
-### 2. Xem danh sách tài khoản, Email, Quota còn lại & Lỗi
+### 2. Xem danh sách tài khoản & Quota
 ```bash
 agi-auth list
 ```
-Output định dạng chuẩn theo `codex-auth` kèm **Kiểm tra trạng thái & Lỗi theo thời gian thực (Health Checks)**:
+Hiển thị tức thì danh sách tài khoản, Plan, Quota còn lại và lần hoạt động gần nhất:
 ```text
-     ACCOUNT                         PLAN            5H REMAIN               WEEKLY REMAIN          LAST ACTIVITY
------------------------------------------------------------------------------------------------------------------
-  01 lnhuyen160902@gmail.com         Disabled        Disabled (TOS)          Disabled (TOS)         19m ago      
-* 02 minhha10c8@gmail.com            Google AI Pro   96% (01:09 on 31 Aug)   55% (16:28 on 01 Sep)  Now          
-  03 onehammer256@gmail.com          Standard        TOS Required            TOS Required           21m ago      
-  04 sieunhanmanhme1511@gmail.com    Google AI Pro   Verify Required         Verify Required        26m ago      
-  05 thanhngan84672@gmail.com        Disabled        Disabled (TOS)          Disabled (TOS)         15m ago      
-  06 trinhduchoang625dora@gmail.com  Google AI Pro   TOS Required            TOS Required           33m ago      
-
-[!] Account Issues & Solutions:
-  • lnhuyen160902@gmail.com: Disabled (TOS) - Service disabled for TOS violation
-    -> Gửi đơn kháng nghị (Submit Appeal): https://forms.gle/hGzM9MEUv2azZsrb9
-  • sieunhanmanhme1511@gmail.com: Verify Required - Account verification required in browser
-    -> Mở link này để xác thực tài khoản: https://accounts.google.com/signin/continue?...
-  • trinhduchoang625dora@gmail.com: TOS Required - Google TOS not accepted on web. Visit https://antigravity.google to activate.
+     ACCOUNT                      PLAN           5H REMAIN       WEEKLY REMAIN        LAST ACTIVITY
+---------------------------------------------------------------------------------------------------
+  01 claude25602@gmail.com        Standard       -               -                    47m ago      
+  02 layaccantinao@gmail.com      Standard       -               -                    8m ago       
+* 03 minhha10c8@gmail.com         Google AI Pro  97% (06:47)     19% (16:28, 01 Sep)  Now          
+  04 supermanvnx001@gmail.com     Standard       -               -                    35m ago      
 ```
 
 ### 3. Chuyển đổi tài khoản (Switch)

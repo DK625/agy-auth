@@ -115,6 +115,33 @@ def get_quota_line(label, quota_dict, time_format):
     reset_badge = f" {FG_GRAY}{CHAR_RESET}{R} {FG_WHITE}{reset_str}{R}" if reset_str else ""
     return f"{FG_WHITE}{label}{R} {q_bar} {p_color}{pct_fmt}{R}{reset_badge}"
 
+def get_active_email():
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+            class CREDENTIAL(ctypes.Structure):
+                _fields_ = [
+                    ("Flags", wintypes.DWORD), ("Type", wintypes.DWORD),
+                    ("TargetName", wintypes.LPWSTR), ("Comment", wintypes.LPWSTR),
+                    ("LastWritten", wintypes.FILETIME), ("CredentialBlobSize", wintypes.DWORD),
+                    ("CredentialBlob", ctypes.POINTER(ctypes.c_char)), ("Persist", wintypes.DWORD),
+                    ("AttributeCount", wintypes.DWORD), ("Attributes", ctypes.c_void_p),
+                    ("TargetAlias", wintypes.LPWSTR), ("UserName", wintypes.LPWSTR)
+                ]
+            advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+            p = ctypes.POINTER(CREDENTIAL)()
+            if advapi32.CredReadW("gemini:antigravity", 1, 0, ctypes.byref(p)):
+                try:
+                    raw = ctypes.string_at(p.contents.CredentialBlob, p.contents.CredentialBlobSize).decode("utf-8")
+                    return json.loads(raw).get("email", "")
+                finally:
+                    advapi32.CredFree(p)
+        except Exception:
+            pass
+    return ""
+
+
 def main():
     try:
         raw_input = sys.stdin.read().strip()
@@ -247,6 +274,7 @@ def main():
         try:
             cache_file = os.path.expanduser("~/.gemini/quota_cache.json")
             cache_data = {
+                "email": get_active_email(),
                 "plan_tier": plan_tier if plan_tier != "null" else "Standard",
                 "quota": quotas,
                 "updated_at": datetime.now().isoformat()

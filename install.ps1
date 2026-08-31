@@ -130,15 +130,15 @@ Write-Host ""
 Write-Host "==> Installation / Update successful!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Features Installed:" -ForegroundColor White
-Write-Host "  [OK] agi-auth CLI         - Multi-account OAuth manager with real-time health checks" -ForegroundColor Green
+Write-Host "  [OK] agi-auth CLI         - Multi-account OAuth Manager & Launcher" -ForegroundColor Green
 Write-Host "  [OK] agi Shortcut         - Fast launcher with --dangerously-skip-permissions" -ForegroundColor Green
 Write-Host "  [OK] Antigravity Statusline - Real-time model, branch, remain context & 5h/7d quota bars" -ForegroundColor Green
 Write-Host "  [OK] Task & Telegram Hooks - Speech TTS & Telegram notifications on task completion" -ForegroundColor Green
 Write-Host ""
 Write-Host "Usage:" -ForegroundColor White
-Write-Host "  agi-auth login          - Direct Google OAuth login and auto-save by Email" -ForegroundColor Cyan
-Write-Host "  agi-auth list           - List all accounts, Email, Quota (Remain 5h/7d) and Errors" -ForegroundColor Cyan
-Write-Host "  agi-auth switch <email> - Switch account (by Number or Email)" -ForegroundColor Cyan
+Write-Host "  agi-auth login          - Direct Google OAuth login, save & auto-launch agi" -ForegroundColor Cyan
+Write-Host "  agi-auth list           - List all accounts, Email, Plan & Quota (Remain 5h/7d)" -ForegroundColor Cyan
+Write-Host "  agi-auth switch <email> - Switch account (by Number or Email) & launch agi" -ForegroundColor Cyan
 Write-Host "  agi-auth remove <email> - Remove an account" -ForegroundColor Cyan
 Write-Host "  agi-auth sync           - Auto-sync active Antigravity session into accounts" -ForegroundColor Cyan
 Write-Host "  agi-auth notify <token> <chat_id> - Config Telegram Bot Token & Chat ID" -ForegroundColor Cyan
