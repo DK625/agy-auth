@@ -284,17 +284,15 @@ def main():
                 json.dump(cache_data, cf, indent=2)
 
             if active_email:
-                acc_file = os.path.expanduser(f"~/.gemini/accounts/{active_email}.json")
-                if os.path.exists(acc_file):
+                acc_path = Path.home() / ".gemini" / "accounts" / f"{active_email}.json"
+                if acc_path.exists():
                     try:
-                        with open(acc_file, "r", encoding="utf-8") as af:
-                            acc_data = json.load(af)
+                        acc_data = json.loads(acc_path.read_text(encoding="utf-8"))
                         if plan_tier and plan_tier != "null":
                             acc_data["plan_tier"] = plan_tier
                         if quotas:
                             acc_data["quota"] = quotas
-                        with open(acc_file, "w", encoding="utf-8") as af:
-                            json.dump(acc_data, af, indent=2)
+                        acc_path.write_text(json.dumps(acc_data, indent=2), encoding="utf-8")
                     except Exception:
                         pass
         except Exception:
