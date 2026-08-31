@@ -272,15 +272,31 @@ def main():
     # Cache live quota for agi-auth
     if quotas or (plan_tier and plan_tier != "null"):
         try:
+            active_email = get_active_email()
             cache_file = os.path.expanduser("~/.gemini/quota_cache.json")
             cache_data = {
-                "email": get_active_email(),
+                "email": active_email,
                 "plan_tier": plan_tier if plan_tier != "null" else "Standard",
                 "quota": quotas,
                 "updated_at": datetime.now().isoformat()
             }
             with open(cache_file, "w", encoding="utf-8") as cf:
                 json.dump(cache_data, cf, indent=2)
+
+            if active_email:
+                acc_file = os.path.expanduser(f"~/.gemini/accounts/{active_email}.json")
+                if os.path.exists(acc_file):
+                    try:
+                        with open(acc_file, "r", encoding="utf-8") as af:
+                            acc_data = json.load(af)
+                        if plan_tier and plan_tier != "null":
+                            acc_data["plan_tier"] = plan_tier
+                        if quotas:
+                            acc_data["quota"] = quotas
+                        with open(acc_file, "w", encoding="utf-8") as af:
+                            json.dump(acc_data, af, indent=2)
+                    except Exception:
+                        pass
         except Exception:
             pass
 

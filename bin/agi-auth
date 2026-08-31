@@ -443,6 +443,16 @@ def find_account_file(identifier):
     return None
 
 
+def extract_quota_strings(q_obj):
+    if not q_obj or not isinstance(q_obj, dict):
+        return "-", "-"
+    q_5h_data = q_obj.get("gemini-5h") or q_obj.get("3p-5h")
+    q_wk_data = q_obj.get("gemini-weekly") or q_obj.get("3p-weekly")
+    q_5h = format_usage_dt(q_5h_data, is_5h=True) if q_5h_data else "-"
+    q_wk = format_usage_dt(q_wk_data, is_5h=False) if q_wk_data else "-"
+    return q_5h, q_wk
+
+
 def cmd_list():
     """List all saved accounts cleanly and instantly."""
     sync_active_session()
@@ -505,15 +515,13 @@ def cmd_list():
                 live_q = quota_info.get("quota") or {}
                 if live_q:
                     acc_obj["quota"] = live_q
-                    q_5h = format_usage_dt(live_q.get("gemini-5h"), is_5h=True)
-                    q_wk = format_usage_dt(live_q.get("gemini-weekly"), is_5h=False)
+                    q_5h, q_wk = extract_quota_strings(live_q)
                 
                 f.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
             elif "quota" in acc_obj:
                 plan = acc_obj.get("plan_tier", plan)
                 saved_q = acc_obj.get("quota") or {}
-                q_5h = format_usage_dt(saved_q.get("gemini-5h"), is_5h=True)
-                q_wk = format_usage_dt(saved_q.get("gemini-weekly"), is_5h=False)
+                q_5h, q_wk = extract_quota_strings(saved_q)
 
             mtime = f.stat().st_mtime
             rel_time = format_relative_time(mtime, is_active=is_active)
