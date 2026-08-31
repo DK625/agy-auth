@@ -308,10 +308,10 @@ def format_relative_time(mtime, is_active=False):
 def format_usage_dt(q_data, is_5h=False):
     """Calculate REMAINING quota percentage and dynamically handle reset time."""
     if not q_data:
-        return "100%"
+        return "-"
     rem = q_data.get("remaining_fraction")
     if rem is None:
-        return "100%"
+        return "-"
     remain_pct = int(round(float(rem) * 100))
     
     res = q_data.get("reset_time")
@@ -447,11 +447,11 @@ def find_account_file(identifier):
 
 def extract_quota_strings(q_obj):
     if not q_obj or not isinstance(q_obj, dict):
-        return "100%", "100%"
+        return "-", "-"
     q_5h_data = q_obj.get("gemini-5h") or q_obj.get("3p-5h")
     q_wk_data = q_obj.get("gemini-weekly") or q_obj.get("3p-weekly")
-    q_5h = format_usage_dt(q_5h_data, is_5h=True) if q_5h_data else "100%"
-    q_wk = format_usage_dt(q_wk_data, is_5h=False) if q_wk_data else "100%"
+    q_5h = format_usage_dt(q_5h_data, is_5h=True) if q_5h_data else "-"
+    q_wk = format_usage_dt(q_wk_data, is_5h=False) if q_wk_data else "-"
     return q_5h, q_wk
 
 
@@ -502,8 +502,8 @@ def cmd_list():
                     pass
 
             plan = acc_obj.get("plan_tier", "Standard")
-            q_5h = "100%"
-            q_wk = "100%"
+            q_5h = "-"
+            q_wk = "-"
 
             cached_acc = (quota_info.get("email") or quota_info.get("account") or "") if quota_info else ""
             matches_cache = bool(cached_acc and cached_acc.lower() == email.lower())
