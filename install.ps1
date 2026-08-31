@@ -42,7 +42,8 @@ $settingsPaths = @(
     "$env:APPDATA\agy\settings.json"
 )
 
-$statusLineCommand = "python `"$StatuslinePyPath`""
+$cleanPyPath = $StatuslinePyPath -replace '\\', '/'
+$statusLineCommand = "python $cleanPyPath"
 
 foreach ($sPath in $settingsPaths) {
     try {
