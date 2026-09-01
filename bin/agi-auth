@@ -491,17 +491,23 @@ def cmd_list():
             default_tier = "Google AI Pro" if acc_obj.get("auth_method") == "consumer" else "Standard"
             plan = acc_obj.get("plan_tier", default_tier)
             error = acc_obj.get("error")
-            q_5h = "-"
-            q_wk = "-"
+            saved_q = acc_obj.get("quota") or {}
+            q_5h, q_wk = extract_quota_strings(saved_q)
+
+            # If account has valid quota recorded, auto-clear stale "Verify Required"
+            if error and error == "Verify Required" and (q_5h != "-" or q_wk != "-"):
+                error = None
+                acc_obj.pop("error", None)
+                try:
+                    f.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
+                except Exception:
+                    pass
 
             if error:
                 err_str = str(error)
                 plan = "Error / Verify"
                 q_5h = err_str if len(err_str) <= 15 else (err_str[:12] + "...")
                 q_wk = "Need Verify"
-            elif "quota" in acc_obj:
-                saved_q = acc_obj.get("quota") or {}
-                q_5h, q_wk = extract_quota_strings(saved_q)
 
             mtime = f.stat().st_mtime
             rel_time = format_relative_time(mtime, is_active=is_active)

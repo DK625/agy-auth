@@ -8,6 +8,7 @@ Zero-dependency, high-performance script utilizing Python Standard Library.
 import sys
 import json
 import os
+import re
 import math
 from datetime import datetime
 from pathlib import Path
@@ -116,7 +117,7 @@ def get_quota_line(label, quota_dict, time_format):
     reset_badge = f" {FG_GRAY}{CHAR_RESET}{R} {FG_WHITE}{reset_str}{R}" if reset_str else ""
     return f"{FG_WHITE}{label}{R} {q_bar} {p_color}{pct_fmt}{R}{reset_badge}"
 
-def get_active_email():
+def cred_read(target="gemini:antigravity"):
     if os.name == "nt":
         try:
             import ctypes
@@ -132,15 +133,95 @@ def get_active_email():
                 ]
             advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
             p = ctypes.POINTER(CREDENTIAL)()
-            if advapi32.CredReadW("gemini:antigravity", 1, 0, ctypes.byref(p)):
+            if advapi32.CredReadW(target, 1, 0, ctypes.byref(p)):
                 try:
-                    raw = ctypes.string_at(p.contents.CredentialBlob, p.contents.CredentialBlobSize).decode("utf-8")
-                    return json.loads(raw).get("email", "")
+                    return ctypes.string_at(p.contents.CredentialBlob, p.contents.CredentialBlobSize).decode("utf-8")
                 finally:
                     advapi32.CredFree(p)
         except Exception:
             pass
+    elif sys.platform == "darwin":
+        try:
+            import subprocess
+            res = subprocess.run(["security", "find-generic-password", "-s", target, "-w"], capture_output=True, text=True, check=True)
+            return res.stdout.strip()
+        except Exception:
+            pass
+    else:
+        try:
+            import subprocess
+            res = subprocess.run(["secret-tool", "lookup", "service", target], capture_output=True, text=True, check=True)
+            return res.stdout.strip()
+        except Exception:
+            pass
+        fallback = Path.home() / ".gemini" / ".active_session.json"
+        if fallback.exists():
+            return fallback.read_text(encoding="utf-8")
+    return None
+
+def get_active_email():
+    raw = cred_read()
+    if raw:
+        try:
+            return json.loads(raw).get("email", "")
+        except Exception:
+            pass
     return ""
+
+def get_target_account_file():
+    """Find the account JSON file for the currently active Antigravity session."""
+    acc_dir = Path.home() / ".gemini" / "accounts"
+    acc_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Environment variable if explicitly set
+    env_acc = os.environ.get("AGI_ACTIVE_ACCOUNT")
+    if env_acc:
+        p = acc_dir / f"{env_acc}.json"
+        if p.exists():
+            return p
+        for f in acc_dir.glob("*.json"):
+            try:
+                obj = json.loads(f.read_text(encoding="utf-8"))
+                if obj.get("email", "").lower() == env_acc.lower():
+                    return f
+            except Exception:
+                pass
+
+    # 2. Email from Credential Vault
+    email = get_active_email()
+    if email:
+        p = acc_dir / f"{email}.json"
+        if p.exists():
+            return p
+        for f in acc_dir.glob("*.json"):
+            try:
+                obj = json.loads(f.read_text(encoding="utf-8"))
+                if obj.get("email", "").lower() == email.lower():
+                    return f
+            except Exception:
+                pass
+
+    # 3. Match vault token against saved accounts
+    try:
+        raw = cred_read()
+        if raw:
+            v_obj = json.loads(raw)
+            v_tok = v_obj.get("token", {})
+            v_key = v_tok.get("refresh_token") or v_tok.get("access_token")
+            if v_key:
+                for f in acc_dir.glob("*.json"):
+                    try:
+                        obj = json.loads(f.read_text(encoding="utf-8"))
+                        f_tok = obj.get("token", {})
+                        f_key = f_tok.get("refresh_token") or f_tok.get("access_token")
+                        if f_key and f_key == v_key:
+                            return f
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+    return None
 
 
 def main():
@@ -271,26 +352,23 @@ def main():
     plan_tier = data.get("plan_tier") or ""
     # Isolated per-account quota and status storage (prevents cross-process pollution)
     try:
-        target_acc = os.environ.get("AGI_ACTIVE_ACCOUNT")
-        if target_acc:
-            acc_path = Path.home() / ".gemini" / "accounts" / f"{target_acc}.json"
-            if acc_path.exists():
-                acc_data = json.loads(acc_path.read_text(encoding="utf-8"))
-                if plan_tier and plan_tier != "null":
-                    acc_data["plan_tier"] = plan_tier
-                if quotas:
-                    acc_data["quota"] = quotas
-                    acc_data.pop("error", None)
-                else:
-                    # If agi ran for this account but received no quota, mark as needing verification
-                    if not acc_data.get("quota"):
-                        acc_data["error"] = "Verify Required"
-                
-                err_msg = data.get("error") or data.get("error_message")
-                if err_msg:
-                    acc_data["error"] = str(err_msg)
-                
-                acc_path.write_text(json.dumps(acc_data, indent=2), encoding="utf-8")
+        acc_path = get_target_account_file()
+        if acc_path and acc_path.exists():
+            acc_data = json.loads(acc_path.read_text(encoding="utf-8"))
+            if plan_tier and plan_tier != "null":
+                acc_data["plan_tier"] = plan_tier
+
+            err_msg = data.get("error") or data.get("error_message")
+
+            if quotas:
+                acc_data["quota"] = quotas
+                acc_data.pop("error", None)
+            elif err_msg:
+                acc_data["error"] = str(err_msg)
+            elif not acc_data.get("quota") and (data.get("auth_error") or data.get("is_error")):
+                acc_data["error"] = "Verify Required"
+
+            acc_path.write_text(json.dumps(acc_data, indent=2), encoding="utf-8")
     except Exception:
         pass
 
