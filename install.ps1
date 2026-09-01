@@ -140,7 +140,6 @@ Write-Host "  agi-auth login          - Direct Google OAuth login, save & auto-l
 Write-Host "  agi-auth list           - List all accounts, Email, Plan & Quota (Remain 5h/7d)" -ForegroundColor Cyan
 Write-Host "  agi-auth switch <email> - Switch account (by Number or Email) & launch agi" -ForegroundColor Cyan
 Write-Host "  agi-auth remove <email> - Remove an account" -ForegroundColor Cyan
-Write-Host "  agi-auth sync           - Auto-sync active Antigravity session into accounts" -ForegroundColor Cyan
 Write-Host "  agi-auth notify <token> <chat_id> - Config Telegram Bot Token & Chat ID" -ForegroundColor Cyan
 Write-Host "  agi                     - Launch Antigravity CLI with statusline" -ForegroundColor Cyan
 Write-Host ""

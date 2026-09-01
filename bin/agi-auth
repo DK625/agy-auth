@@ -752,7 +752,6 @@ def print_help():
   agi-auth list                Xem danh sách tài khoản, Email, Plan & Quota
   agi-auth switch <num/email>  Chuyển sang tài khoản & mở agi
   agi-auth remove <num/email>  Xóa tài khoản (bằng Số thứ tự hoặc Email)
-  agi-auth sync                Tự động đồng bộ tài khoản đang đăng nhập hiện tại
   agi-auth notify [token] [id] Cấu hình Telegram notification (bot_token & chat_id)
 
 \x1b[1mOptions:\x1b[0m

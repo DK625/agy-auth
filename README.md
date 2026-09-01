@@ -89,13 +89,7 @@ agi-auth remove 03
 agi-auth remove onehammer256@gmail.com
 ```
 
-### 5. Tự động đồng bộ tài khoản đang đăng nhập (Sync)
-Tự động phát hiện và đồng bộ tài khoản Antigravity CLI đang hoạt động trong phiên hiện tại vào danh sách quản lý:
-```bash
-agi-auth sync
-```
-
-### 6. Cấu hình Telegram Notification & Task Speech Hook
+### 5. Cấu hình Telegram Notification & Task Speech Hook
 Tự động phát âm thanh (TTS Speech) và gửi tin nhắn Telegram khi Agent **hoàn thành task (`Stop`)** hoặc **cần hỏi người dùng (`ask_question`)**:
 ```bash
 # Xem trạng thái cấu hình Telegram hiện tại

@@ -95,7 +95,6 @@ echo -e "  \033[36magi-auth login\033[0m          - Direct Google OAuth login, s
 echo -e "  \033[36magi-auth list\033[0m           - List all saved accounts, Email, Plan & Quota (Remain 5h/7d)"
 echo -e "  \033[36magi-auth switch <email>\033[0m - Switch account (by Number or Email) & launch agi"
 echo -e "  \033[36magi-auth remove <email>\033[0m - Remove an account"
-echo -e "  \033[36magi-auth sync\033[0m           - Auto-sync active Antigravity session into accounts"
 echo -e "  \033[36magi-auth notify <token> <chat_id>\033[0m - Config Telegram Bot Token & Chat ID"
 echo -e "  \033[36magi\033[0m                     - Launch Antigravity CLI with statusline"
 echo ""
