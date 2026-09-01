@@ -488,7 +488,8 @@ def cmd_list():
                 except Exception:
                     pass
 
-            plan = acc_obj.get("plan_tier", "Standard")
+            default_tier = "Google AI Pro" if acc_obj.get("auth_method") == "consumer" else "Standard"
+            plan = acc_obj.get("plan_tier", default_tier)
             error = acc_obj.get("error")
             q_5h = "-"
             q_wk = "-"
