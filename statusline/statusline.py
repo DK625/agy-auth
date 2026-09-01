@@ -169,57 +169,25 @@ def get_active_email():
     return ""
 
 def get_target_account_file():
-    """Find the account JSON file for the currently active Antigravity session."""
+    """Find the account JSON file strictly bound to this process's active session."""
+    env_acc = os.environ.get("AGI_ACTIVE_ACCOUNT")
+    if not env_acc:
+        return None
+
     acc_dir = Path.home() / ".gemini" / "accounts"
     acc_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Environment variable if explicitly set
-    env_acc = os.environ.get("AGI_ACTIVE_ACCOUNT")
-    if env_acc:
-        p = acc_dir / f"{env_acc}.json"
-        if p.exists():
-            return p
-        for f in acc_dir.glob("*.json"):
-            try:
-                obj = json.loads(f.read_text(encoding="utf-8"))
-                if obj.get("email", "").lower() == env_acc.lower():
-                    return f
-            except Exception:
-                pass
-
-    # 2. Email from Credential Vault
-    email = get_active_email()
-    if email:
-        p = acc_dir / f"{email}.json"
-        if p.exists():
-            return p
-        for f in acc_dir.glob("*.json"):
-            try:
-                obj = json.loads(f.read_text(encoding="utf-8"))
-                if obj.get("email", "").lower() == email.lower():
-                    return f
-            except Exception:
-                pass
-
-    # 3. Match vault token against saved accounts
-    try:
-        raw = cred_read()
-        if raw:
-            v_obj = json.loads(raw)
-            v_tok = v_obj.get("token", {})
-            v_key = v_tok.get("refresh_token") or v_tok.get("access_token")
-            if v_key:
-                for f in acc_dir.glob("*.json"):
-                    try:
-                        obj = json.loads(f.read_text(encoding="utf-8"))
-                        f_tok = obj.get("token", {})
-                        f_key = f_tok.get("refresh_token") or f_tok.get("access_token")
-                        if f_key and f_key == v_key:
-                            return f
-                    except Exception:
-                        pass
-    except Exception:
-        pass
+    clean = re.sub(r'[/\\:*?"<>|]', '_', env_acc.strip())
+    p = acc_dir / f"{clean}.json"
+    if p.exists():
+        return p
+    for f in acc_dir.glob("*.json"):
+        try:
+            obj = json.loads(f.read_text(encoding="utf-8"))
+            if obj.get("email", "").lower() == env_acc.lower():
+                return f
+        except Exception:
+            pass
 
     return None
 
@@ -350,7 +318,7 @@ def main():
     quota_lines = []
     quotas = data.get("quota") or {}
     plan_tier = data.get("plan_tier") or ""
-    # Isolated per-account quota and status storage (prevents cross-process pollution)
+    # Isolated per-account quota and status storage (strictly bound to active session)
     try:
         acc_path = get_target_account_file()
         if acc_path and acc_path.exists():
@@ -361,12 +329,13 @@ def main():
             err_msg = data.get("error") or data.get("error_message")
 
             if quotas:
+                # Valid quota received for this account -> save quota & clear error
                 acc_data["quota"] = quotas
                 acc_data.pop("error", None)
-            elif err_msg:
-                acc_data["error"] = str(err_msg)
-            elif not acc_data.get("quota") and (data.get("auth_error") or data.get("is_error")):
-                acc_data["error"] = "Verify Required"
+            else:
+                # No quota returned by agy -> account needs verification / eligibility failed
+                acc_data.pop("quota", None)
+                acc_data["error"] = str(err_msg) if err_msg else "Verify Required"
 
             acc_path.write_text(json.dumps(acc_data, indent=2), encoding="utf-8")
     except Exception:

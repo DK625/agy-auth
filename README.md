@@ -62,12 +62,13 @@ Hiển thị tức thì danh sách tài khoản, Plan, Quota còn lại và lầ
 
 #### 💡 Cơ chế cập nhật Quota (Quota Mechanism)
 * **Vì sao không gọi API get quota độc lập?** Google Antigravity **không cung cấp public REST endpoint độc lập** để tra cứu số dư Quota cho tài khoản cá nhân (Consumer / Google AI Pro). Thông tin quota chỉ được trả về trong luồng session nội bộ của Antigravity CLI khi người dùng mở phiên làm việc.
-* **Cơ chế Hooking thông minh:**
-  1. Khi bạn chạy `agi-auth login` hoặc `agi-auth switch`, `agi-auth` tự động khởi chạy `agi` dưới danh tính của tài khoản đó.
-  2. Ngay khi `agi` mở lên (hoặc trong mỗi lượt chat), `statusline` sẽ bắt ngay thông số Quota thực tế (`5h` / `Weekly`), Plan (`Google AI Pro` / `Standard`) và thông tin lỗi (nếu có), lưu cô lập riêng vào profile của tài khoản đó.
-  3. Khi chạy `agi-auth list`, dữ liệu Quota gần nhất sẽ được hiển thị ngay lập tức.
-  4. **Tự động phục hồi Real-Time (Dynamic Reset):** Khi đồng hồ thực tế vượt qua mốc giờ reset (`reset_time`), bảng `list` sẽ **tự động tính toán phục hồi về `100%`** mà không cần bạn phải mở lại `agi`.
-  5. Với tài khoản mới thêm chưa mở `agi` lần nào, bảng sẽ hiển thị dấu `-` cho đến phiên đăng nhập đầu tiên. Tài khoản gặp lỗi xác minh tài khoản sẽ hiển thị `Verify Req`.
+* **Cơ chế Hooking thông minh & Cách ly Quota tuyệt đối (Process-Bound Quota Isolation):**
+  1. Khi bạn chạy `agi-auth login`, `agi-auth switch` hoặc gõ `agi`, hệ thống tự động bind danh tính tài khoản vào biến môi trường process-local `AGI_ACTIVE_ACCOUNT`.
+  2. Ngay khi `agi` mở lên (hoặc trong mỗi lượt chat), `statusline` sẽ bắt ngay thông số Quota thực tế (`5h` / `Weekly`), Plan (`Google AI Pro` / `Standard`) hoặc cờ lỗi (`Verify Required` nếu bị chặn eligibility), lưu cô lập riêng vào file `~/.gemini/accounts/<email>.json` của tài khoản đó.
+  3. **Không bao giờ bị nhiễm chéo giữa các terminal:** Mỗi phiên làm việc chỉ ghi đúng vào tài khoản gắn liền với phiên đó, hoàn toàn độc lập kể cả khi các tab khác chuyển đổi tài khoản. *(Xem chi tiết tại [QUOTA_ISOLATION_ARCHITECTURE.md](docs/QUOTA_ISOLATION_ARCHITECTURE.md))*
+  4. Khi chạy `agi-auth list`, dữ liệu Quota gần nhất của từng tài khoản sẽ được hiển thị độc lập ngay lập tức.
+  5. **Tự động phục hồi Real-Time (Dynamic Reset):** Khi đồng hồ thực tế vượt qua mốc giờ reset (`reset_time`), bảng `list` sẽ **tự động tính toán phục hồi về `100%`** mà không cần bạn phải mở lại `agi`.
+  6. Với tài khoản mới thêm chưa mở `agi` lần nào, bảng sẽ hiển thị dấu `-`. Tài khoản gặp lỗi xác minh tài khoản sẽ hiển thị `Verify Required`.
 
 ### 3. Chuyển đổi tài khoản (Switch)
 Hỗ trợ chuyển bằng **Số thứ tự (Index)** hoặc **Email Google**:

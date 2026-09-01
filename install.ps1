@@ -107,6 +107,15 @@ if (Test-Path "$BinDir") {
     }
 }
 function agi {
+    try {
+        `$activeAccFile = "`$env:USERPROFILE\.gemini\.active_account"
+        if (Test-Path `$activeAccFile) {
+            `$activeAcc = (Get-Content `$activeAccFile -Raw -ErrorAction SilentlyContinue).Trim()
+            if (`$activeAcc) {
+                `$env:AGI_ACTIVE_ACCOUNT = `$activeAcc
+            }
+        }
+    } catch {}
     agy --dangerously-skip-permissions @args
 }
 "@

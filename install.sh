@@ -68,7 +68,12 @@ done
 CONFIG_LINES="
 # --- agi & agi-auth ---
 export PATH=\"\$HOME/.local/bin:\$HOME/.agi-auth/bin:\$PATH\"
-alias agi='agy --dangerously-skip-permissions'
+agi() {
+    if [ -f \"\$HOME/.gemini/.active_account\" ]; then
+        export AGI_ACTIVE_ACCOUNT=\"\$(cat \"\$HOME/.gemini/.active_account\" | tr -d '[:space:]')\"
+    fi
+    agy --dangerously-skip-permissions \"\$@\"
+}
 "
 
 for RC in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.bash_profile"; do

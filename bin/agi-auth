@@ -380,6 +380,8 @@ def sync_active_session():
                 pass
 
         if matched_file:
+            active_acc_file = Path.home() / ".gemini" / ".active_account"
+            active_acc_file.write_text(matched_file.stem, encoding="utf-8")
             return matched_file
 
         email = curr_obj.get("email")
@@ -397,6 +399,8 @@ def sync_active_session():
             curr_obj["auth_method"] = "consumer"
             
         target_file.write_text(json.dumps(curr_obj, indent=2), encoding="utf-8")
+        active_acc_file = Path.home() / ".gemini" / ".active_account"
+        active_acc_file.write_text(clean_name, encoding="utf-8")
         return target_file
     except Exception:
         return None
@@ -649,6 +653,9 @@ def perform_direct_google_oauth(name=None):
     target_file = ACCOUNTS_DIR / f"{profile_name}.json"
     target_file.write_text(json.dumps(agy_credential_obj, indent=2), encoding="utf-8")
 
+    active_acc_file = Path.home() / ".gemini" / ".active_account"
+    active_acc_file.write_text(email if email else profile_name, encoding="utf-8")
+
     print(f"\n\x1b[1;32m[OK] Login successful! Saved account as '{profile_name}'.\x1b[0m")
     return email if email else True
 
@@ -688,6 +695,8 @@ def cmd_switch(identifier, launch=True):
     
     email = acc_obj.get("email")
     display_txt = email if email else target_file.stem
+    active_acc_file = Path.home() / ".gemini" / ".active_account"
+    active_acc_file.write_text(email if email else target_file.stem, encoding="utf-8")
     print(f"\x1b[1;32m[OK] Switched to account '{display_txt}' successfully!\x1b[0m")
     if launch:
         launch_agi(account_email=email)
@@ -702,6 +711,14 @@ def cmd_remove(identifier):
     sync_active_session()
     target_file = find_account_file(identifier)
     if target_file and target_file.exists():
+        active_acc_file = Path.home() / ".gemini" / ".active_account"
+        if active_acc_file.exists():
+            try:
+                curr_act = active_acc_file.read_text(encoding="utf-8").strip()
+                if curr_act == target_file.stem or (acc_obj.get("email") and curr_act == acc_obj.get("email")):
+                    active_acc_file.unlink()
+            except Exception:
+                pass
         target_file.unlink()
         print(f"\x1b[1;32m[OK] Removed account '{target_file.stem}'.\x1b[0m")
     else:
