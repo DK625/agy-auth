@@ -28,8 +28,9 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-ACCOUNTS_DIR = Path.home() / ".gemini" / "accounts"
-QUOTA_CACHE_FILE = Path.home() / ".gemini" / "quota_cache.json"
+GEMINI_DIR = Path.home() / ".gemini"
+ACCOUNTS_DIR = GEMINI_DIR / "accounts"
+QUOTA_CACHE_FILE = GEMINI_DIR / "quota_cache.json"
 CRED_TARGET = "gemini:antigravity"
 CRED_USER = "antigravity"
 
@@ -767,6 +768,53 @@ def cmd_notify(bot_token=None, chat_id=None):
         print("  agi-auth notify <bot_token> <chat_id>\n")
 
 
+def ensure_statusline_config():
+    """Ensure statusLine command is registered in all settings.json locations."""
+    statusline_py = GEMINI_DIR / "statusline.py"
+    if not statusline_py.exists():
+        return
+
+    if sys.platform == "win32":
+        cmd_str = f'python "{str(statusline_py).replace(os.sep, "/")}"'
+        settings_paths = [
+            GEMINI_DIR / "antigravity-cli" / "settings.json",
+            GEMINI_DIR / "settings.json",
+            Path(os.environ.get("LOCALAPPDATA", "")) / "agy" / "settings.json" if os.environ.get("LOCALAPPDATA") else None,
+            Path(os.environ.get("APPDATA", "")) / "agy" / "settings.json" if os.environ.get("APPDATA") else None,
+        ]
+    else:
+        cmd_str = f'python3 "{statusline_py}"'
+        settings_paths = [
+            GEMINI_DIR / "antigravity-cli" / "settings.json",
+            GEMINI_DIR / "settings.json",
+            Path.home() / ".config" / "antigravity" / "settings.json",
+            Path.home() / ".config" / "agy" / "settings.json",
+        ]
+
+    for sp in settings_paths:
+        if not sp:
+            continue
+        try:
+            sp.parent.mkdir(parents=True, exist_ok=True)
+            data = {}
+            if sp.exists():
+                try:
+                    data = json.loads(sp.read_text(encoding="utf-8"))
+                except Exception:
+                    data = {}
+            if not isinstance(data, dict):
+                data = {}
+
+            curr_cmd = data.get("statusLine", {}).get("command") if isinstance(data.get("statusLine"), dict) else None
+            if curr_cmd != cmd_str:
+                if "statusLine" not in data or not isinstance(data["statusLine"], dict):
+                    data["statusLine"] = {}
+                data["statusLine"]["command"] = cmd_str
+                sp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        except Exception:
+            pass
+
+
 def print_help():
     print("""\x1b[1;36magi-auth\x1b[0m - Multi-account manager for Antigravity CLI (agy)
 
@@ -786,6 +834,7 @@ def print_help():
 
 
 def main():
+    ensure_statusline_config()
     if len(sys.argv) < 2:
         print_help()
         return

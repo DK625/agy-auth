@@ -65,7 +65,7 @@ $settingsPaths = @(
 )
 
 $cleanPyPath = $StatuslinePyPath -replace '\\', '/'
-$statusLineCommand = "python $cleanPyPath"
+$statusLineCommand = "python `"$cleanPyPath`""
 
 foreach ($sPath in $settingsPaths) {
     try {

@@ -40,7 +40,7 @@ ln -sf "$INSTALL_DIR/bin/agi-auth" "$BIN_DIR/agi-auth"
 # 2. Download Statusline Script & Configuration
 download_file "$BASE_URL/statusline/statusline.py?t=$TIMESTAMP" "$GEMINI_DIR/statusline.py"
 download_file "$BASE_URL/statusline/statusline.sh?t=$TIMESTAMP" "$GEMINI_DIR/statusline.sh"
-chmod +x "$GEMINI_DIR/statusline.sh"
+chmod +x "$GEMINI_DIR/statusline.py" "$GEMINI_DIR/statusline.sh" 2>/dev/null || true
 
 if [ ! -f "$GEMINI_DIR/statusline.json" ]; then
     download_file "$BASE_URL/statusline/statusline.json?t=$TIMESTAMP" "$GEMINI_DIR/statusline.json"
@@ -56,18 +56,47 @@ if [ ! -f "$GEMINI_DIR/notify.json" ]; then
     download_file "$BASE_URL/hooks/notify.json.example?t=$TIMESTAMP" "$GEMINI_DIR/notify.json"
 fi
 
-# 4. Configure settings.json for Antigravity
-for CONF in "$GEMINI_DIR/antigravity-cli/settings.json" "$GEMINI_DIR/settings.json" "$HOME/.config/antigravity/settings.json"; do
-    mkdir -p "$(dirname "$CONF")"
-    if [ ! -f "$CONF" ]; then
-        echo "{\"statusLine\": {\"command\": \"bash \\\"$GEMINI_DIR/statusline.sh\\\"\"}}" > "$CONF"
-    fi
-done
+# 4. Configure settings.json for Antigravity (merge statusLine command)
+python3 - <<EOF
+import json
+import os
+from pathlib import Path
+
+gemini_dir = Path("$GEMINI_DIR")
+statusline_py = gemini_dir / "statusline.py"
+statusline_cmd = f'python3 "{statusline_py}"'
+
+conf_paths = [
+    gemini_dir / "antigravity-cli" / "settings.json",
+    gemini_dir / "settings.json",
+    Path.home() / ".config" / "antigravity" / "settings.json",
+    Path.home() / ".config" / "agy" / "settings.json"
+]
+
+for conf in conf_paths:
+    try:
+        conf.parent.mkdir(parents=True, exist_ok=True)
+        data = {}
+        if conf.exists():
+            try:
+                data = json.loads(conf.read_text(encoding="utf-8"))
+            except Exception:
+                data = {}
+        if not isinstance(data, dict):
+            data = {}
+        if "statusLine" not in data or not isinstance(data["statusLine"], dict):
+            data["statusLine"] = {}
+        data["statusLine"]["command"] = statusline_cmd
+        conf.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    except Exception as e:
+        print(f"Warning: Could not configure {conf}: {e}")
+EOF
 
 # 5. Setup Shell Profile (bash / zsh)
 CONFIG_LINES="
 # --- agi & agi-auth ---
 export PATH=\"\$HOME/.local/bin:\$HOME/.agi-auth/bin:\$PATH\"
+unalias agi 2>/dev/null || true
 agi() {
     if [ -f \"\$HOME/.gemini/.active_account\" ]; then
         export AGI_ACTIVE_ACCOUNT=\"\$(cat \"\$HOME/.gemini/.active_account\" | tr -d '[:space:]')\"

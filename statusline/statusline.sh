@@ -49,13 +49,13 @@ fi
     (.plan_tier // ""),
     (.terminal_width // 80),
     (.cwd // ""),
-    (.quota?["3p-5h"]?.remaining_fraction? // "null"),
+    (.quota?["3p-5h"]?.remaining_fraction? // .quota?["3p-5h"]?.remaining_percentage? // "null"),
     (.quota?["3p-5h"]?.reset_time? // "null"),
-    (.quota?["3p-weekly"]?.remaining_fraction? // "null"),
+    (.quota?["3p-weekly"]?.remaining_fraction? // .quota?["3p-weekly"]?.remaining_percentage? // "null"),
     (.quota?["3p-weekly"]?.reset_time? // "null"),
-    (.quota?["gemini-5h"]?.remaining_fraction? // "null"),
+    (.quota?["gemini-5h"]?.remaining_fraction? // .quota?["gemini-5h"]?.remaining_percentage? // "null"),
     (.quota?["gemini-5h"]?.reset_time? // "null"),
-    (.quota?["gemini-weekly"]?.remaining_fraction? // "null"),
+    (.quota?["gemini-weekly"]?.remaining_fraction? // .quota?["gemini-weekly"]?.remaining_percentage? // "null"),
     (.quota?["gemini-weekly"]?.reset_time? // "null")
   ' <<< "$input" 2>/dev/null || printf "idle\n0\n\nfalse\nfalse\n0\n0\n0\n\n\n\n80\n\nnull\nnull\nnull\nnull\nnull\nnull\nnull\nnull\n"
 )"
