@@ -34,6 +34,49 @@ QUOTA_CACHE_FILE = GEMINI_DIR / "quota_cache.json"
 CRED_TARGET = "gemini:antigravity"
 CRED_USER = "antigravity"
 
+def atomic_write_json(target_path, data, indent=2):
+    """Safely and atomically writes JSON to target_path using a temporary file and os.replace
+    to prevent file corruption, partial writes, and race conditions."""
+    p = Path(target_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = p.with_name(f"{p.name}.{os.getpid()}_{secrets.token_hex(4)}.tmp")
+    payload = json.dumps(data, indent=indent, ensure_ascii=False)
+    try:
+        tmp_path.write_text(payload, encoding="utf-8")
+        os.replace(tmp_path, p)
+    except Exception:
+        try:
+            p.write_text(payload, encoding="utf-8")
+        except Exception:
+            pass
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
+
+def safe_read_json(file_path):
+    """Safely reads and decodes a JSON file. If trailing characters exist (e.g. from race conditions),
+    salvages the valid JSON and immediately heals the file on disk."""
+    p = Path(file_path)
+    if not p.exists():
+        return None
+    try:
+        content = p.read_text(encoding="utf-8")
+        if not content.strip():
+            return None
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as e:
+            if "Extra data" in str(e) and e.pos > 0:
+                valid_str = content[:e.pos].rstrip()
+                data = json.loads(valid_str)
+                atomic_write_json(p, data)
+                return data
+            raise
+    except Exception:
+        return None
+
 def _k(arr):
     return bytes([b ^ 0x5A for b in arr]).decode("ascii")
 
@@ -249,7 +292,7 @@ def ensure_valid_token(acc_obj, account_file=None):
                 acc_obj["token"] = token_data
                 
                 if account_file and account_file.exists():
-                    account_file.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
+                    atomic_write_json(account_file, acc_obj, indent=2)
 
                 curr_raw = cred_read()
                 if curr_raw and get_token_key(curr_raw) == refresh_token:
@@ -371,9 +414,10 @@ def sync_active_session():
         matched_file = None
         for f in saved_files:
             try:
-                f_content = f.read_text(encoding="utf-8")
-                f_obj = json.loads(f_content)
-                f_key = get_token_key(f_content)
+                f_obj = safe_read_json(f)
+                if not f_obj:
+                    continue
+                f_key = get_token_key(json.dumps(f_obj))
                 if curr_key and f_key == curr_key:
                     matched_file = f
                     break
@@ -399,7 +443,7 @@ def sync_active_session():
         if "auth_method" not in curr_obj:
             curr_obj["auth_method"] = "consumer"
             
-        target_file.write_text(json.dumps(curr_obj, indent=2), encoding="utf-8")
+        atomic_write_json(target_file, curr_obj, indent=2)
         active_acc_file = Path.home() / ".gemini" / ".active_account"
         active_acc_file.write_text(clean_name, encoding="utf-8")
         return target_file
@@ -430,8 +474,8 @@ def find_account_file(identifier):
 
     for f in saved_files:
         try:
-            obj = json.loads(f.read_text(encoding="utf-8"))
-            if obj.get("email", "").lower() == str(identifier).strip().lower():
+            obj = safe_read_json(f)
+            if obj and obj.get("email", "").lower() == str(identifier).strip().lower():
                 return f
         except Exception:
             pass
@@ -473,9 +517,10 @@ def cmd_list():
 
     for idx, f in enumerate(saved_files, 1):
         try:
-            content = f.read_text(encoding="utf-8")
-            acc_obj = json.loads(content)
-            saved_key = get_token_key(content)
+            acc_obj = safe_read_json(f)
+            if not acc_obj:
+                continue
+            saved_key = get_token_key(json.dumps(acc_obj))
             is_active = bool(curr_key and saved_key == curr_key)
             email = acc_obj.get("email") or f.stem
 
@@ -489,7 +534,7 @@ def cmd_list():
                     vault_tok = curr_obj.get("token")
                     if vault_tok and vault_tok.get("access_token") != acc_obj.get("token", {}).get("access_token"):
                         acc_obj["token"] = vault_tok
-                        f.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
+                        atomic_write_json(f, acc_obj, indent=2)
                 except Exception:
                     pass
 
@@ -504,7 +549,7 @@ def cmd_list():
                 error = None
                 acc_obj.pop("error", None)
                 try:
-                    f.write_text(json.dumps(acc_obj, indent=2), encoding="utf-8")
+                    atomic_write_json(f, acc_obj, indent=2)
                 except Exception:
                     pass
 
@@ -652,7 +697,7 @@ def perform_direct_google_oauth(name=None):
     profile_name = name if name else (email if email else f"account_{int(time.time())}")
     ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
     target_file = ACCOUNTS_DIR / f"{profile_name}.json"
-    target_file.write_text(json.dumps(agy_credential_obj, indent=2), encoding="utf-8")
+    atomic_write_json(target_file, agy_credential_obj, indent=2)
 
     active_acc_file = Path.home() / ".gemini" / ".active_account"
     active_acc_file.write_text(email if email else profile_name, encoding="utf-8")
@@ -682,7 +727,11 @@ def cmd_switch(identifier, launch=True):
         cmd_list()
         sys.exit(1)
 
-    acc_obj = json.loads(target_file.read_text(encoding="utf-8"))
+    acc_obj = safe_read_json(target_file)
+    if not acc_obj:
+        print(f"\x1b[91m[Error] Failed to read account data from '{target_file.name}'!\x1b[0m")
+        sys.exit(1)
+
     ensure_valid_token(acc_obj, target_file)
 
     secret_str = json.dumps(acc_obj) if "token" in acc_obj else target_file.read_text(encoding="utf-8")

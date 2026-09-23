@@ -10,6 +10,7 @@ import json
 import os
 import re
 import math
+import secrets
 from datetime import datetime
 from pathlib import Path
 
@@ -168,6 +169,49 @@ def get_active_email():
             pass
     return ""
 
+def atomic_write_json(target_path, data, indent=2):
+    """Safely and atomically writes JSON to target_path using a temporary file and os.replace
+    to prevent file corruption, partial writes, and race conditions."""
+    p = Path(target_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = p.with_name(f"{p.name}.{os.getpid()}_{secrets.token_hex(4)}.tmp")
+    payload = json.dumps(data, indent=indent, ensure_ascii=False)
+    try:
+        tmp_path.write_text(payload, encoding="utf-8")
+        os.replace(tmp_path, p)
+    except Exception:
+        try:
+            p.write_text(payload, encoding="utf-8")
+        except Exception:
+            pass
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
+
+def safe_read_json(file_path):
+    """Safely reads and decodes a JSON file. If trailing characters exist (e.g. from race conditions),
+    salvages the valid JSON and immediately heals the file on disk."""
+    p = Path(file_path)
+    if not p.exists():
+        return None
+    try:
+        content = p.read_text(encoding="utf-8")
+        if not content.strip():
+            return None
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as e:
+            if "Extra data" in str(e) and e.pos > 0:
+                valid_str = content[:e.pos].rstrip()
+                data = json.loads(valid_str)
+                atomic_write_json(p, data)
+                return data
+            raise
+    except Exception:
+        return None
+
 def get_target_account_file():
     """Find the account JSON file strictly bound to this process's active session."""
     env_acc = os.environ.get("AGI_ACTIVE_ACCOUNT")
@@ -183,8 +227,8 @@ def get_target_account_file():
         return p
     for f in acc_dir.glob("*.json"):
         try:
-            obj = json.loads(f.read_text(encoding="utf-8"))
-            if obj.get("email", "").lower() == env_acc.lower():
+            obj = safe_read_json(f)
+            if obj and obj.get("email", "").lower() == env_acc.lower():
                 return f
         except Exception:
             pass
@@ -322,22 +366,23 @@ def main():
     try:
         acc_path = get_target_account_file()
         if acc_path and acc_path.exists():
-            acc_data = json.loads(acc_path.read_text(encoding="utf-8"))
-            if plan_tier and plan_tier != "null":
-                acc_data["plan_tier"] = plan_tier
+            acc_data = safe_read_json(acc_path)
+            if acc_data:
+                if plan_tier and plan_tier != "null":
+                    acc_data["plan_tier"] = plan_tier
 
-            err_msg = data.get("error") or data.get("error_message")
+                err_msg = data.get("error") or data.get("error_message")
 
-            if quotas:
-                # Valid quota received for this account -> save quota & clear error
-                acc_data["quota"] = quotas
-                acc_data.pop("error", None)
-            else:
-                # No quota returned by agy -> account needs verification / eligibility failed
-                acc_data.pop("quota", None)
-                acc_data["error"] = str(err_msg) if err_msg else "Verify Required"
+                if quotas:
+                    # Valid quota received for this account -> save quota & clear error
+                    acc_data["quota"] = quotas
+                    acc_data.pop("error", None)
+                else:
+                    # No quota returned by agy -> account needs verification / eligibility failed
+                    acc_data.pop("quota", None)
+                    acc_data["error"] = str(err_msg) if err_msg else "Verify Required"
 
-            acc_path.write_text(json.dumps(acc_data, indent=2), encoding="utf-8")
+                atomic_write_json(acc_path, acc_data, indent=2)
     except Exception:
         pass
 
