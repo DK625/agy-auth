@@ -824,7 +824,17 @@ def ensure_statusline_config():
         return
 
     if sys.platform == "win32":
-        cmd_str = f'python "{str(statusline_py).replace(os.sep, "/")}"'
+        path_str = str(statusline_py)
+        if " " in path_str:
+            try:
+                import ctypes
+                buf = ctypes.create_unicode_buffer(500)
+                ctypes.windll.kernel32.GetShortPathNameW(path_str, buf, 500)
+                if buf.value:
+                    path_str = buf.value
+            except Exception:
+                pass
+        cmd_str = f'python {path_str.replace(os.sep, "/")}'
         settings_paths = [
             GEMINI_DIR / "antigravity-cli" / "settings.json",
             GEMINI_DIR / "settings.json",

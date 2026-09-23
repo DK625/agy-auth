@@ -65,7 +65,15 @@ $settingsPaths = @(
 )
 
 $cleanPyPath = $StatuslinePyPath -replace '\\', '/'
-$statusLineCommand = "python `"$cleanPyPath`""
+if ($cleanPyPath -like "* *") {
+    try {
+        $fso = New-Object -ComObject Scripting.FileSystemObject
+        if (Test-Path $StatuslinePyPath) {
+            $cleanPyPath = $fso.GetFile($StatuslinePyPath).ShortPath -replace '\\', '/'
+        }
+    } catch {}
+}
+$statusLineCommand = "python $cleanPyPath"
 
 foreach ($sPath in $settingsPaths) {
     try {
