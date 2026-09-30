@@ -2,11 +2,11 @@
 
 ## 1. Vấn đề Cross-Process Pollution (Nhiễm chéo Quota giữa các Account)
 Trong môi trường làm việc đa terminal / đa tài khoản:
-- Giả sử Terminal 1 đang chạy Antigravity CLI (`agi`) với tài khoản `supermanvnx001@gmail.com`.
-- Người dùng mở Terminal 2 và thực hiện chuyển sang tài khoản mới `layaccantinao@gmail.com` (tài khoản này chưa verify và gặp lỗi `Eligibility Check Failed`).
-- Khi lệnh switch diễn ra, OS Credential Vault (`gemini:antigravity`) được cập nhật sang `layaccantinao@gmail.com`.
-- Lúc này, Terminal 1 đang chạy `supermanvnx001` kích hoạt hook `statusline`. Nếu `statusline` đọc thông tin account từ OS Credential Vault (singleton dùng chung toàn hệ thống), nó sẽ thấy account là `layaccantinao` và **ghi đè toàn bộ quota sống của `supermanvnx001` vào file của `layaccantinao`**.
-- Kết quả: Tài khoản `layaccantinao` (đang bị lỗi verify) bị hiển thị sai lệch thành có quota giống hệt `supermanvnx001`, xóa mất cờ báo lỗi `"Verify Required"`.
+- Giả sử Terminal 1 đang chạy Antigravity CLI (`agi`) với tài khoản `user3@gmail.com`.
+- Người dùng mở Terminal 2 và thực hiện chuyển sang tài khoản mới `user4@gmail.com` (tài khoản này chưa verify và gặp lỗi `Eligibility Check Failed`).
+- Khi lệnh switch diễn ra, OS Credential Vault (`gemini:antigravity`) được cập nhật sang `user4@gmail.com`.
+- Lúc này, Terminal 1 đang chạy `user3` kích hoạt hook `statusline`. Nếu `statusline` đọc thông tin account từ OS Credential Vault (singleton dùng chung toàn hệ thống), nó sẽ thấy account là `user4` và **ghi đè toàn bộ quota sống của `user3` vào file của `user4`**.
+- Kết quả: Tài khoản `user4` (đang bị lỗi verify) bị hiển thị sai lệch thành có quota giống hệt `user3`, xóa mất cờ báo lỗi `"Verify Required"`.
 
 ---
 
@@ -34,7 +34,7 @@ Trong môi trường làm việc đa terminal / đa tài khoản:
 Mỗi tài khoản được lưu độc lập thành 1 file json với schema rõ ràng:
 ```json
 {
-  "email": "layaccantinao@gmail.com",
+  "email": "user4@gmail.com",
   "auth_method": "consumer",
   "token": {
     "access_token": "...",

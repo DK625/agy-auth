@@ -55,9 +55,9 @@ Hiển thị tức thì danh sách tài khoản, Plan, Quota còn lại và lầ
 ```text
      ACCOUNT                      PLAN           5H REMAIN       WEEKLY REMAIN        LAST ACTIVITY
 ---------------------------------------------------------------------------------------------------
-  01 claude25602@gmail.com        Standard       -               -                    47m ago      
-* 02 minhha10c8@gmail.com         Google AI Pro  38% (06:47)     9% (16:28, 01 Sep)   Now          
-  03 supermanvnx001@gmail.com     Standard       85% (08:15)     95% (03:00, 08 Sep)  35m ago      
+  01 user2@gmail.com              Standard       -               -                    47m ago      
+* 02 user1@gmail.com              Google AI Pro  38% (06:47)     9% (16:28, 01 Sep)   Now          
+  03 user3@gmail.com              Standard       85% (08:15)     95% (03:00, 08 Sep)  35m ago      
 ```
 
 #### 💡 Cơ chế cập nhật Quota (Quota Mechanism)
@@ -78,7 +78,7 @@ agi-auth switch 02
 # hoặc: agi-auth switch 2
 
 # Chuyển bằng email
-agi-auth switch minhha10c8@gmail.com
+agi-auth switch user1@gmail.com
 ```
 
 ### 4. Xóa tài khoản
@@ -87,7 +87,7 @@ agi-auth switch minhha10c8@gmail.com
 agi-auth remove 03
 
 # Xóa bằng email
-agi-auth remove onehammer256@gmail.com
+agi-auth remove user5@gmail.com
 ```
 
 ### 5. Cấu hình Telegram Notification & Task Speech Hook
