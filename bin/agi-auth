@@ -761,6 +761,7 @@ def cmd_remove(identifier):
     sync_active_session()
     target_file = find_account_file(identifier)
     if target_file and target_file.exists():
+        acc_obj = safe_read_json(target_file) or {}
         active_acc_file = Path.home() / ".gemini" / ".active_account"
         if active_acc_file.exists():
             try:
@@ -769,6 +770,12 @@ def cmd_remove(identifier):
                     active_acc_file.unlink()
             except Exception:
                 pass
+        # If this is the live session in the Credential Vault, clear it too;
+        # otherwise sync_active_session() re-imports it on the next list.
+        curr_key = get_token_key(cred_read())
+        if curr_key and curr_key == get_token_key(json.dumps(acc_obj)):
+            cred_delete()
+            print("\x1b[93m[!] This was the active session: signed out of Antigravity. Run 'agi-auth switch <num>' to pick another account.\x1b[0m")
         target_file.unlink()
         print(f"\x1b[1;32m[OK] Removed account '{target_file.stem}'.\x1b[0m")
     else:
